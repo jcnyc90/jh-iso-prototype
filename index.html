@@ -1,1 +1,1779 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#1b1528;color:#fffaf0;">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Jackson Heights RPG — Isometric Pixel-Art Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1b1528;
+      color: #fffaf0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    #game-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background-color: #1b1528;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      z-index: 1;
+    }
+    .hud-layer {
+      position: fixed;
+      z-index: 20;
+      pointer-events: auto;
+    }
+    .retro-box {
+      background: rgba(34, 24, 52, 0.94);
+      border: 2px solid #f6dccb;
+      border-radius: 10px;
+      box-shadow: 0 3px 0 #120c1c, 0 5px 14px rgba(0, 0, 0, 0.65);
+    }
+    .retro-pill {
+      background: rgba(42, 31, 61, 0.95);
+      border: 1.5px solid rgba(246, 220, 203, 0.6);
+      color: #fffaf0;
+      border-radius: 7px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      line-height: 1.1;
+      transition: transform 0.08s ease, background-color 0.12s ease;
+    }
+    .retro-pill:hover { background: rgba(62, 46, 89, 0.98); }
+    .retro-pill:active { transform: scale(0.95); }
+    .retro-pill.active {
+      background: #2d6a4f;
+      border-color: #7ee08a;
+      color: #ffffff;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .hidden { display: none !important; }
+    #stick-base {
+      width: 84px;
+      height: 84px;
+      border-radius: 42px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      background: radial-gradient(circle, rgba(246,220,203,0.22) 0%, rgba(42,31,61,0.85) 75%);
+      border: 2px solid rgba(246, 220, 203, 0.75);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #stick-knob {
+      width: 36px;
+      height: 36px;
+      border-radius: 18px;
+      pointer-events: none;
+      background: radial-gradient(circle at 35% 35%, #ffd46e, #d97724);
+      border: 2px solid #2a1f3d;
+    }
+    #btn-action {
+      width: 72px;
+      height: 72px;
+      border-radius: 36px;
+      background: linear-gradient(145deg, #fbbf24, #d97706);
+      color: #141020;
+      border: 2.5px solid #ffffff;
+      font-weight: 800;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      transition: transform 0.08s ease;
+    }
+    #btn-action:active { transform: scale(0.92); background: #fbbf24; }
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      background: rgba(12, 8, 20, 0.78);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .truncate {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body style="background:#1b1528;color:#fffaf0;">
 
+  <!-- Main Isometric & Top-Down Pixel Canvas -->
+  <canvas id="game-canvas" width="360" height="640"></canvas>
+
+  <!-- Top Left: Mini-Radar + Live Dynamic Status -->
+  <div class="hud-layer" style="top: 8px; left: 8px; max-width: 225px; display: flex; flex-direction: column; gap: 5px;">
+    <div class="retro-box" style="padding: 6px; display: flex; align-items: center; gap: 7px;">
+      <canvas id="radar-canvas" width="68" height="68" style="border-radius: 6px; border: 1px solid #8f8794; background: #141020; flex-shrink: 0;"></canvas>
+      <div style="min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 10px; line-height: 1.15;">
+        <div style="display: flex; align-items: center; gap: 3px; flex-wrap: wrap;">
+          <span id="view-mode-badge" class="badge" style="background: #047857; color: #fff;">2:1 ISO</span>
+          <span id="rider-mode-badge" class="badge" style="background: #d97706; color: #fff;">ON FOOT</span>
+        </div>
+        <div id="hud-zone-name" class="truncate" style="font-weight: 700; color: #fcd34d;">Diversity Plaza</div>
+        <div id="hud-corner-name" class="truncate" style="font-size: 9px; color: #f6dccb;">74th St &amp; 37th Rd</div>
+        <div id="hud-surface-badge" class="mono truncate" style="font-size: 9px; color: #6ee7b7;">Plaza Surface</div>
+        <div id="hud-wgs84" class="mono truncate" style="font-size: 8px; color: #cbd5e1;">40.7475°N, 73.8913°W</div>
+      </div>
+    </div>
+
+    <!-- Nearby Storefront Prompt -->
+    <div id="nearby-store-card" class="retro-box hidden" style="padding: 6px 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+        <span id="nearby-store-category" class="badge" style="background: #be123c; color: #fff;">SHOP</span>
+        <span class="mono" style="font-size: 8px; color: #fcd34d;">Tap ACTION</span>
+      </div>
+      <div id="nearby-store-title" class="truncate" style="font-weight: 700; font-size: 11px; color: #fff; margin-top: 2px;">Phayul</div>
+      <div id="nearby-store-addr" class="truncate" style="font-size: 9px; color: #f6dccb;">37-65 74th St</div>
+    </div>
+
+    <!-- Nearby Citi Bike Dock Prompt -->
+    <div id="nearby-dock-card" class="retro-box hidden" style="padding: 5px 8px; border-color: #60a5fa;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+        <span class="badge" style="background: #2563eb; color: #fff;">CITI BIKE DOCK</span>
+        <span id="nearby-dock-count" class="mono" style="font-size: 9px; color: #93c5fd;">3/5 Bikes</span>
+      </div>
+      <div id="nearby-dock-title" class="truncate" style="font-weight: 700; font-size: 10px; color: #fff; margin-top: 2px;">74 St &amp; 37 Ave</div>
+    </div>
+  </div>
+
+  <!-- Top Right: Controls & 363-Place Directory -->
+  <div class="hud-layer" style="top: 8px; right: 8px; max-width: calc(100% - 240px); display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+    <div class="retro-box" style="padding: 5px; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 3px;">
+      <button id="btn-toggle-view" type="button" class="retro-pill active" title="Toggle 2:1 Isometric / Top-Down (V / Tab)">
+        <span id="label-toggle-view">📐 Iso</span>
+      </button>
+      <button id="btn-toggle-axes" type="button" class="retro-pill" title="Toggle Movement Axes (C)">
+        <span id="label-toggle-axes">Grid</span>
+      </button>
+      <button id="btn-quick-bike" type="button" class="retro-pill" title="Mount / Dismount Bike">
+        <span id="label-quick-bike">🚲 Bike</span>
+      </button>
+      <button type="button" data-speed="0" class="speed-btn retro-pill active mono">1x</button>
+      <button type="button" data-speed="1" class="speed-btn retro-pill mono">2x</button>
+      <button type="button" data-speed="2" class="speed-btn retro-pill mono">4x</button>
+      <button type="button" data-speed="3" class="speed-btn retro-pill mono">8x</button>
+      <button id="btn-zoom-cycle" type="button" class="retro-pill mono" title="Cycle Pixel Scale">
+        <span id="label-zoom">2x Px</span>
+      </button>
+      <button id="btn-toggle-audio" type="button" class="retro-pill" title="Mute / Unmute Retro Synth">
+        <span id="label-audio">🔊</span>
+      </button>
+      <button id="btn-toggle-search" type="button" class="retro-pill" style="color: #fcd34d;" title="Search 363 Real OSM Businesses">
+        🔍 363
+      </button>
+      <button id="btn-open-guide" type="button" class="retro-pill" style="color: #a7f3d0;" title="Guide & Delivery Log">
+        📖 Log
+      </button>
+    </div>
+
+    <!-- Fast-Jump Landmark Chips -->
+    <div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px;">
+      <button type="button" data-jump="diversity" class="jump-chip retro-pill">Diversity Plaza</button>
+      <button type="button" data-jump="Phayul" class="jump-chip retro-pill">Phayul</button>
+      <button type="button" data-jump="Jackson Diner" class="jump-chip retro-pill">Jackson Diner</button>
+      <button type="button" data-jump="Patel Brothers" class="jump-chip retro-pill">Patel Bros</button>
+      <button type="button" data-jump="Arepa Lady" class="jump-chip retro-pill">Arepa Lady</button>
+      <button type="button" data-jump="Birria-Landia" class="jump-chip retro-pill">Birria-Landia</button>
+      <button type="button" data-jump="paseo" class="jump-chip retro-pill">34th Paseo</button>
+    </div>
+
+    <!-- Search 363 OSM Businesses Drawer -->
+    <div id="search-drawer" class="retro-box hidden" style="padding: 8px; width: min(270px, 85vw); flex-direction: column; gap: 5px;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 10px; font-weight: 700; color: #fcd34d;">363 OSM Businesses (<span id="search-count">363</span>)</span>
+        <button id="btn-close-search" type="button" class="retro-pill" style="padding: 2px 5px;">✕</button>
+      </div>
+      <input id="search-input" type="text" placeholder="Search Phayul, Patel, momo, 37th..." style="width: 100%; padding: 5px 7px; border-radius: 5px; background: #141020; border: 1px solid #8f8794; color: #fff; font-size: 11px; outline: none;" />
+      <div id="search-results" style="max-height: 165px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Center: Active Order Ticket + Live Distance Tracker -->
+  <div class="hud-layer" style="bottom: 8px; left: 50%; transform: translateX(-50%); width: min(94vw, 400px);">
+    <div id="order-ticket" class="retro-box" style="padding: 7px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <div style="min-width: 0; flex: 1;">
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <span id="order-status-pill" class="badge" style="background: #f59e0b; color: #141020;">PICKUP</span>
+          <span id="order-item-title" class="truncate" style="font-weight: 700; font-size: 11px; color: #fde68a;">Steamed Beef Momos</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 2px;">
+          <div id="order-step-desc" class="truncate" style="font-size: 10px; color: #f6dccb;">Go to Phayul &amp; tap ACTION</div>
+          <span id="order-distance-pill" class="mono" style="font-size: 9px; color: #93c5fd; font-weight: 700; flex-shrink: 0;">12m NE</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;">
+        <div class="mono" style="font-size: 10px; font-weight: 700; color: #6ee7b7;">$<span id="hud-earnings">0</span> (<span id="hud-completed-count">0</span>)</div>
+        <button id="btn-new-order" type="button" class="retro-pill" style="padding: 2px 6px; font-size: 9px; color: #fcd34d;">📋 Next Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Left: Virtual Thumbstick -->
+  <div class="hud-layer" style="bottom: 68px; left: 10px;">
+    <div id="stick-base">
+      <div id="stick-knob"></div>
+    </div>
+  </div>
+
+  <!-- Bottom Right: Action Button -->
+  <div class="hud-layer" style="bottom: 68px; right: 10px;">
+    <button id="btn-action" type="button">
+      <span style="font-size: 12px;">ACTION</span>
+      <span class="mono" style="font-size: 8px; margin-top: 2px;">Space / Z</span>
+    </button>
+  </div>
+
+  <!-- Storefront Interior Modal -->
+  <div id="dialogue-modal" class="modal-backdrop hidden">
+    <div class="retro-box" style="max-width: 360px; width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(246,220,203,0.25); padding-bottom: 6px;">
+        <div>
+          <span id="modal-badge" class="badge" style="background: #047857; color: #fff;">STOREFRONT INTERIOR</span>
+          <h2 id="modal-title" style="margin: 3px 0 0 0; font-size: 14px; font-weight: 700; color: #fcd34d;">Phayul</h2>
+        </div>
+        <button id="btn-close-modal" type="button" class="retro-pill">Close</button>
+      </div>
+      <canvas id="interior-canvas" width="320" height="136" style="width: 100%; border-radius: 6px; border: 1px solid #8f8794; background: #1b1528;"></canvas>
+      <div id="modal-body" style="font-size: 11px; line-height: 1.4; color: #fffaf0; display: flex; flex-direction: column; gap: 5px;"></div>
+      <div id="modal-actions" style="display: flex; justify-content: flex-end; gap: 6px;">
+        <button id="btn-modal-order" type="button" class="retro-pill active">Assign Order Here</button>
+        <button id="btn-modal-ok" type="button" class="retro-pill">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Neighborhood Guide & Delivery Log Modal -->
+  <div id="guide-modal" class="modal-backdrop hidden">
+    <div class="retro-box" style="max-width: 370px; width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(246,220,203,0.25); padding-bottom: 6px;">
+        <div>
+          <span class="badge" style="background: #7c3aed; color: #fff;">COURIER HANDBOOK</span>
+          <h2 style="margin: 3px 0 0 0; font-size: 14px; font-weight: 700; color: #fcd34d;">Jackson Heights Courier Log</h2>
+        </div>
+        <button id="btn-close-guide" type="button" class="retro-pill">Close</button>
+      </div>
+      <div style="font-size: 11px; line-height: 1.45; color: #f6dccb; display: flex; flex-direction: column; gap: 6px;">
+        <div>• <b>Movement:</b> Use the touch thumbstick or <b>WASD / Arrow Keys</b>. Toggle <b>📐 Iso / 🗺️ Top</b> with <b>V</b> or <b>Tab</b>.</div>
+        <div>• <b>Traffic Rules:</b> When riding a <b>Citi Bike</b>, stay on street roadways, crosswalks, Diversity Plaza, or the <b>34th Ave Open Street Paseo</b> (sidewalks are walk-only!).</div>
+        <div>• <b>Elevated 7 Train:</b> Watch the 7 Express rumble overhead along Roosevelt Avenue between 73rd and 90th Streets.</div>
+        <div style="border-top: 1px solid rgba(246,220,203,0.2); padding-top: 6px; font-weight: 700; color: #6ee7b7;">Recent Deliveries Completed:</div>
+        <div id="delivery-log-list" class="mono" style="max-height: 110px; overflow-y: auto; font-size: 10px; background: #141020; padding: 6px; border-radius: 6px; border: 1px solid #4a4e69;">
+          No deliveries completed yet. Head to the flashing marker and press ACTION!
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const MAP_W = 554;
+      const MAP_H = 436;
+      const TILE_SIZE = 16;
+      const ORIGIN_LAT = 40.7469102;
+      const ORIGIN_LON = -73.8920554;
+      const METERS_PER_DEG_LAT = 111132.92;
+      const METERS_PER_DEG_LON = 84301.45;
+      const COS_ROT = Math.cos((16.5 * Math.PI) / 180);
+      const SIN_ROT = Math.sin((16.5 * Math.PI) / 180);
+      const METERS_PER_PIXEL = 0.38095238;
+
+      const SEG_RAW = "22,382,41,382,12,4,Roosevelt Avenue|41,382,52,382,12,4,Roosevelt Avenue|52,382,82,382,12,4,Roosevelt Avenue|82,382,112,382,12,4,Roosevelt Avenue|112,382,142,382,12,4,Roosevelt Avenue|142,382,172,382,12,4,Roosevelt Avenue|172,382,202,382,12,4,Roosevelt Avenue|202,382,232,382,12,4,Roosevelt Avenue|232,382,262,382,12,4,Roosevelt Avenue|262,382,292,382,12,4,Roosevelt Avenue|292,382,322,382,12,4,Roosevelt Avenue|322,382,336,382,12,4,Roosevelt Avenue|336,382,352,382,12,4,Roosevelt Avenue|352,382,382,382,12,4,Roosevelt Avenue|382,382,412,382,12,4,Roosevelt Avenue|412,382,424,382,12,4,Roosevelt Avenue|424,382,442,382,12,4,Roosevelt Avenue|442,382,468,382,12,4,Roosevelt Avenue|468,382,472,382,12,4,Roosevelt Avenue|472,382,502,382,12,4,Roosevelt Avenue|502,382,518,382,12,4,Roosevelt Avenue|518,382,532,382,12,4,Roosevelt Avenue|22,308,52,308,9,0,37th Avenue|52,308,82,308,9,0,37th Avenue|82,308,112,308,9,0,37th Avenue|112,308,142,308,9,0,37th Avenue|142,308,172,308,9,0,37th Avenue|172,308,202,308,9,0,37th Avenue|202,308,232,308,9,0,37th Avenue|232,308,262,308,9,0,37th Avenue|262,308,292,308,9,0,37th Avenue|292,308,322,308,9,0,37th Avenue|322,308,352,308,9,0,37th Avenue|352,308,382,308,9,0,37th Avenue|382,308,412,308,9,0,37th Avenue|412,308,442,308,9,0,37th Avenue|442,308,472,308,9,0,37th Avenue|472,308,502,308,9,0,37th Avenue|502,308,532,308,9,0,37th Avenue|22,354,52,354,6,1,37th Road|52,354,82,354,6,0,37th Road|82,354,112,354,6,0,37th Road|112,354,142,354,6,0,37th Road|142,248,172,248,9,0,35th Avenue|172,248,202,248,9,0,35th Avenue|202,248,232,248,9,0,35th Avenue|232,248,262,248,9,0,35th Avenue|262,248,292,248,9,0,35th Avenue|292,248,322,248,9,0,35th Avenue|322,248,352,248,9,0,35th Avenue|352,248,382,248,9,0,35th Avenue|382,248,412,248,9,0,35th Avenue|412,248,442,248,9,0,35th Avenue|442,248,472,248,9,0,35th Avenue|472,248,502,248,9,0,35th Avenue|142,190,172,190,9,2,34th Avenue|172,190,202,190,9,2,34th Avenue|202,190,232,190,9,2,34th Avenue|232,190,262,190,9,2,34th Avenue|262,190,292,190,9,2,34th Avenue|292,190,322,190,9,2,34th Avenue|322,190,352,190,9,2,34th Avenue|352,190,382,190,9,2,34th Avenue|382,190,412,190,9,2,34th Avenue|412,190,442,190,9,2,34th Avenue|442,190,472,190,9,2,34th Avenue|22,308,22,354,6,0,73rd Street|52,308,52,354,6,0,74th Street|82,308,82,354,6,0,75th Street|112,308,112,354,6,0,76th Street|142,308,142,354,6,0,77th Street|22,354,22,382,6,1,73rd Street|52,354,52,382,6,0,74th Street|82,354,82,382,6,0,75th Street|112,354,112,382,6,0,76th Street|142,354,142,382,6,0,77th Street|52,382,52,398,6,0,74th Street|82,382,82,414,6,0,75th Street|172,308,172,382,6,0,78th Street|202,308,202,382,6,0,79th Street|232,308,232,382,6,0,80th Street|262,308,262,382,6,0,81st Street|292,308,292,382,6,0,82nd Street|322,308,322,382,6,0,83rd Street|352,308,352,382,6,0,84th Street|382,308,382,382,6,0,85th Street|412,308,412,382,6,0,86th Street|442,308,442,382,6,0,87th Street|472,308,472,382,6,0,88th Street|502,308,502,382,6,0,89th Street|532,308,532,382,6,0,90th Street|142,248,142,308,6,0,77th Street|172,248,172,308,6,0,78th Street|202,248,202,308,6,0,79th Street|232,248,232,308,6,0,80th Street|262,248,262,308,6,0,81st Street|292,248,292,308,6,0,82nd Street|322,248,322,308,6,0,83rd Street|352,248,352,308,6,0,84th Street|382,248,382,308,6,0,85th Street|412,248,412,308,6,0,86th Street|442,248,442,308,6,0,87th Street|472,248,472,308,6,0,88th Street|502,248,502,308,6,0,89th Street|142,190,142,248,6,0,77th Street|172,190,172,248,6,0,78th Street|202,190,202,248,6,0,79th Street|232,190,232,248,6,0,80th Street|262,190,262,248,6,0,81st Street|292,190,292,248,6,0,82nd Street|322,190,322,248,6,0,83rd Street|352,190,352,248,6,0,84th Street|382,190,382,248,6,0,85th Street|412,190,412,248,6,0,86th Street|442,190,442,248,6,0,87th Street|472,190,472,248,6,0,88th Street|172,190,172,133,6,1,78th Street|22,354,41,382,9,0,Broadway|41,382,52,398,9,0,Broadway|52,398,82,414,9,0,Broadway|22,308,22,248,6,0,73rd Street|22,248,22,190,6,0,73rd Street|22,190,22,133,6,0,73rd Street|22,133,22,71,6,0,73rd Street|22,71,22,22,6,0,73rd Street|52,308,52,248,6,0,74th Street|52,248,52,190,6,0,74th Street|52,190,52,133,6,0,74th Street|52,133,52,71,6,0,74th Street|52,71,52,22,6,0,74th Street|82,308,82,248,6,0,75th Street|82,248,82,190,6,0,75th Street|82,190,82,133,6,0,75th Street|82,133,82,71,6,0,75th Street|82,71,82,22,6,0,75th Street|112,308,112,248,6,0,76th Street|112,248,112,190,6,0,76th Street|112,190,112,133,6,0,76th Street|112,133,112,71,6,0,76th Street|112,71,112,22,6,0,76th Street|142,190,142,133,6,0,77th Street|142,133,142,71,6,0,77th Street|142,71,142,22,6,0,77th Street|172,133,172,71,6,0,78th Street|172,71,172,22,6,0,78th Street|202,190,202,133,6,0,79th Street|202,133,202,71,6,0,79th Street|202,71,202,22,6,0,79th Street|232,190,232,133,6,0,80th Street|232,133,232,71,6,0,80th Street|232,71,232,22,6,0,80th Street|262,190,262,133,6,0,81st Street|262,133,262,71,6,0,81st Street|262,71,262,22,6,0,81st Street|292,190,292,133,6,0,82nd Street|292,133,292,71,6,0,82nd Street|292,71,292,22,6,0,82nd Street|322,190,322,133,6,0,83rd Street|322,133,322,71,6,0,83rd Street|322,71,322,22,6,0,83rd Street|352,190,352,133,6,0,84th Street|352,133,352,71,6,0,84th Street|352,71,352,22,6,0,84th Street|382,190,382,133,6,0,85th Street|382,133,382,71,6,0,85th Street|382,71,382,22,6,0,85th Street|412,190,412,133,6,0,86th Street|412,133,412,71,6,0,86th Street|412,71,412,22,6,0,86th Street|442,190,442,133,6,0,87th Street|442,133,442,71,6,0,87th Street|442,71,442,22,6,0,87th Street|472,190,472,133,6,0,88th Street|472,133,472,71,6,0,88th Street|472,71,472,22,6,0,88th Street|502,248,502,190,6,0,89th Street|502,190,502,133,6,0,89th Street|502,133,502,71,6,0,89th Street|502,71,502,22,6,0,89th Street|532,308,532,248,6,0,90th Street|532,248,532,190,6,0,90th Street|532,190,532,133,6,0,90th Street|532,133,532,71,6,0,90th Street|532,71,532,22,6,0,90th Street|22,22,52,22,9,0,31st Avenue|52,22,82,22,9,0,31st Avenue|82,22,112,22,9,0,31st Avenue|112,22,142,22,9,0,31st Avenue|142,22,172,22,9,0,31st Avenue|172,22,202,22,9,0,31st Avenue|202,22,232,22,9,0,31st Avenue|232,22,262,22,9,0,31st Avenue|262,22,292,22,9,0,31st Avenue|292,22,322,22,9,0,31st Avenue|322,22,352,22,9,0,31st Avenue|352,22,382,22,9,0,31st Avenue|382,22,412,22,9,0,31st Avenue|412,22,442,22,9,0,31st Avenue|442,22,472,22,9,0,31st Avenue|472,22,502,22,9,0,31st Avenue|502,22,532,22,9,0,31st Avenue|22,71,52,71,9,0,32nd Avenue|52,71,82,71,9,0,32nd Avenue|82,71,112,71,9,0,32nd Avenue|112,71,142,71,9,0,32nd Avenue|142,71,172,71,9,0,32nd Avenue|172,71,202,71,9,0,32nd Avenue|202,71,232,71,9,0,32nd Avenue|232,71,262,71,9,0,32nd Avenue|262,71,292,71,9,0,32nd Avenue|292,71,322,71,9,0,32nd Avenue|322,71,352,71,9,0,32nd Avenue|352,71,382,71,9,0,32nd Avenue|382,71,412,71,9,0,32nd Avenue|412,71,442,71,9,0,32nd Avenue|442,71,472,71,9,0,32nd Avenue|472,71,502,71,9,0,32nd Avenue|502,71,532,71,9,0,32nd Avenue|22,133,52,133,12,0,Northern Boulevard|52,133,82,133,12,0,Northern Boulevard|82,133,112,133,12,0,Northern Boulevard|112,133,142,133,12,0,Northern Boulevard|142,133,172,133,12,0,Northern Boulevard|172,133,202,133,12,0,Northern Boulevard|202,133,232,133,12,0,Northern Boulevard|232,133,262,133,12,0,Northern Boulevard|262,133,292,133,12,0,Northern Boulevard|292,133,322,133,12,0,Northern Boulevard|322,133,352,133,12,0,Northern Boulevard|352,133,382,133,12,0,Northern Boulevard|382,133,412,133,12,0,Northern Boulevard|412,133,442,133,12,0,Northern Boulevard|442,133,472,133,12,0,Northern Boulevard|472,133,502,133,12,0,Northern Boulevard|502,133,532,133,12,0,Northern Boulevard|22,190,52,190,9,2,34th Avenue|52,190,82,190,9,2,34th Avenue|82,190,112,190,9,2,34th Avenue|112,190,142,190,9,2,34th Avenue|472,190,502,190,9,2,34th Avenue|502,190,532,190,9,2,34th Avenue|22,248,52,248,9,0,35th Avenue|52,248,82,248,9,0,35th Avenue|82,248,112,248,9,0,35th Avenue|112,248,142,248,9,0,35th Avenue|502,248,532,248,9,0,35th Avenue";
+      const BIZ_RAW = "Shop~shop~7507 31st Ave~92~12|Laundromat Dry Cleaners~laundry~75-04 31st Ave~88~26|Playa Nail Spa~salon~75-06 31st Ave~90~26|75 St Super Bazaar~grocery~75-10 31st Ave~93~26|Auto & Bike Shop~hardware~30-50 77th St~131~12|Bank~bank~77-01 31st Ave~151~15|Caroline's Cleaners~laundry~~237~18|Mari'7 Beauty Salon~salon~~249~18|King River~restaurant~80-18 31st Ave~253~26|Hortencia's Laundromat~laundry~82-18 31st Ave~315~26|Sif~bar~88-19 31st Ave~494~18|KMB Deli & Grocery~grocery~88-21 31st Ave~496~18|Zenaida Espino-Santos~clinic~76-10 34th Ave~134~195|Shop~shop~~423~243|Pharmacy~pharmacy~35-75 73rd St~34~301|Abdullah Sweets~restaurant~73-06 37th Ave~30~311|Sagar Chinese~restaurant~74-19 37th Ave~69~304|Preojon~shop~74-04B 37th Ave~62~311|Apna Express~pharmacy~74-12 37th Ave~64~311|Himalayan Restaurant & Bar~restaurant~74-14 37th Ave~66~311|Rajdhani~restaurant~74-16 37th Ave~67~311|Premium Supermarket~grocery~74-22 37th Ave~75~311|Jackpot 777 Inc.~grocery~75-03 37th Ave~88~304|Food Dynasty~grocery~75-07 37th Ave~94~304|Wines & Liquor~bar~75-13 37th Ave~98~305|Habib Electronics and Furniture~electronics~75-15 37th Ave~101~304|Shades of vision~optician~75-17 37th Ave~103~305|Qahwah Valley Cafe~cafe~75-15 37th Ave~104~305|Ricky's Cafe~cafe~75-02 37th Ave~84~311|Amit Fabrics & Saree Palace~clothes~75-04 37th Ave~85~311|Olivos Opticians~optician~75-08 37th Ave~89~311|Khan Electronics~electronics~75-10 37th Ave~91~311|Elmhurst Famous Pizza~restaurant~75-12 37th Ave~92~311|Health Care Clinic~clinic~75-14 37th Ave~93~311|Angel~restaurant~75-18 37th Ave~98~311|Restaurant~restaurant~75-20 37th Ave~99~311|Mailbox Express~books~75-22 37th Ave~100~311|Fantastic Joy Art Boutique~books~75-24 37th Ave~104~311|Uttara~pharmacy~75-24 37th Ave~104~311|Tibetan Japanese Restaurant~restaurant~75-26 37th Ave~105~311|Lhasa Fast Food~restaurant~76-03 37th Ave~119~305|Swim Two Birds~restaurant~76-05 37th Ave~121~304|Isabel's Hair Salon~salon~~130~304|Unit Cleaners~laundry~77-05 37th Ave~152~305|Okawa~restaurant~77-5A 37th Ave~154~304|The Sister Pizza~restaurant~77-09 37th Ave~156~305|New Peking~restaurant~77-13 37th Ave~163~305|Arepa Lady~cafe~77-15A 37th Ave~166~304|American Chicken~restaurant~78-03 37th Ave~179~305|C&S Value Mart~shop~78-09 37th Ave~182~305|Dollar Mart~shop~78-19 37th Ave~188~305|Arunee Thai~restaurant~~192~305|Coffee Shop~cafe~78-27 37th Ave~194~305|Service Counter~service~~189~319|Appetitto~deli~79-07 37th Ave~211~304|Wok's Chinese Cuisine~restaurant~79-23 37th Ave~224~305|Table Wine~bar~79-14 37th Ave~215~313|Seba Seba~restaurant~79-28 37th Ave~226~313|Earthly Choice Deli~deli~80-07 37th Ave~239~305|Just Made 4 U~restaurant~80-21 37th Ave~251~305|Caff\u00e9 Bene~cafe~8025 81st St~257~305|Kim's Brother~grocery~80-04 37th Ave~238~313|Brother's Bubble Tea~cafe~80-10 37th Ave~242~313|Happy Kitchen~restaurant~80-12 37th Ave~244~313|La Boina Roja Steak House~restaurant~80-18 37th Ave~251~313|Nueva Vida Pharmacy~pharmacy~81-25 37th Ave~285~304|Jahn's~restaurant~~269~313|Two Brothers Farm~grocery~~271~313|La Casa de Los Antojitos~bakery~~274~313|Lens Express~optician~82-02 37th Ave~297~313|37th Avenue Grocery Inc~grocery~82-06 37th Ave~301~313|Yummy's Chicken and Pizza~restaurant~82-08 37th Ave~304~313|Jackson House Restaurant~restaurant~82-14 37th Ave~310~313|Mattress Firm~hardware~82-20 37th Ave~316~313|Pan & Mas~bakery~83-03 37th Ave~328~304|Minimart Inc~grocery~83-09 37th Ave~333~304|Over the Moon Juice & Coffee~cafe~83-15 37th Ave~338~304|Vitalscript Pharmacy and Medical Supplies~pharmacy~83-17 37th Ave~340~304|Atlas Travel Group~travel~83-21 37th Ave~342~304|Liz Discount Fabric Inc~clothes~83-23 37th Ave~344~304|Thomas Pizza~restaurant~83-06 37th Ave~330~313|Jackson Heights Health Food and Natural Vitamins~grocery~83-10 37th Ave~334~313|Barriles Restaurante Colombiano~restaurant~83-14 37th Ave~339~313|Las Margaritas~restaurant~83-22 37th Ave~347~313|Downtown Natural Market~grocery~~360~304|Ocean Boil Restaurante Comida Del Mar~restaurant~84-20 37th Ave~370~313|Grocery~grocery~85-08 37th Ave~396~313|La Nueva Bakery~bakery~86-10 37th Ave~425~313|New Tomo Japanese Cuisine~restaurant~86-12 37th Ave~427~313|Trade Fair~grocery~89-02 37th Ave~511~313|99\u00a2 & up Discount~grocery~89-18 37th Ave~521~313|Hispanoamericana Meat Market~deli~89-22 37th Ave~524~313|Kabab King~restaurant~73-01 37th Rd~27~351|Tai Shin Discount~bar~~29~352|Bangla Travel~travel~73-05 37th Rd~30~351|Ittadi Garden & Grill~restaurant~73-07 37th Rd~34~352|Momo Truck~shop~~57~353|Phayul II~restaurant~~62~352|Phayul~restaurant~~57~361|Angel Indian Restaurant~restaurant~74-14 37th Rd~71~361|Nepali Momo~restaurant~~73~360|Rose Barber~salon~~74~360|Laliguras Bistro~restaurant~3763 76th St~117~361|World's borough bookstore~books~34-06 73rd St~18~196|Jax Inn Diner~restaurant~72-12 Northern Blvd~14~140|Raja Sweets & Fast Food~restaurant~72-31 37th Ave~16~304|Rajbhog Sweets~restaurant~72-27 37th Ave~13~304|Dosa Delight~restaurant~35-66 73rd St~19~301|Eagle Theater~service~~31~347|Aapna Bazaar~grocery~72-20 37th Ave~12~314|Mama's Supermarket~deli~37-08 73rd St~15~316|Bank~bank~72-35 Broadway~16~347|Sammy's Halal Food~restaurant~~15~349|Mom's Momos~shop~~13~353|Tenzin Salon~salon~72-32 Broadway~13~359|Restaurant~restaurant~72-32 Broadway~16~364|Planet Auto~hardware~~47~137|Juan Carlos De Fex~dentist~~57~252|Wow Designs~clothes~~53~312|Merit Kebab~restaurant~37-04 74th St~53~313|India Sari Palace~clothes~~54~315|South Asian Community Center~service~~55~316|Patel Brothers~grocery~37-27 74th St~59~332|Bank~bank~73-14 37th Ave~44~311|Mita Jewelers~jewelry~37-30 74th St~42~332|Jackson Diner~restaurant~~46~336|Butala Emporium~shop~~46~340|Karishma~clothes~37-48 74th St~47~342|Lhasa Fast Food~restaurant~37-50A 74th St~47~345|Cassidy's Ale House~bar~75-02 31st Ave~87~26|Image Heights Pharmacy~pharmacy~75-01 37th Ave~87~304|Zen & Wei Laundromat~laundry~~74~319|Bank~bank~37-67 75th St~87~373|Gary's~bakery~~77~373|La Abundancia~bakery~~87~392|G Mart~grocery~~90~369|Elmhurst Senior Center~shop~~98~374|Prince~bar~~89~379|Restaurant~restaurant~75-12 Broadway~92~377|Alfonso's Bar~bar~75-15 Broadway~101~375|Fay Da Bakery~bakery~75-10 Broadway~91~377|All Smiles Dentistry~dentist~40-30 75th St~79~376|Yilhung Cafe~grocery~40-36 75th St~79~377|K&L Deli~grocery~76-01 37th Ave~117~305|Dime Bank~bank~75-23 37th Ave~108~305|Sal's Barber Shop~salon~35-64 76th St~109~299|El Toum~restaurant~35-62 76th St~108~298|Vincent's Hair Design~salon~35-60 76th St~108~297|Grocery~grocery~76-10 37th Ave~116~312|Mango Rico~grocery~75-28 37th Ave~106~311|Seli Grocery~grocery~76-01 Roosevelt Ave~117~374|Laly's~restaurant~~108~372|Ochoa's M Jewelry~jewelry~~106~372|Auto & Bike Shop~hardware~~113~122|Espresso 77~cafe~35-57A 77th St~147~298|Electronics~electronics~35-59 77th St~147~300|Modern Barber Shop~salon~35-61 77th St~147~301|Frank's Pharmacy~pharmacy~77-01 37th Ave~147~304|Due Fratelli~restaurant~~137~304|Bank~bank~76-27 37th Ave~137~304|Rest Medical Care~clinic~37-28 77th St~132~333|Club Evolution~bar~76-17 Roosevelt Ave~136~373|Bank~bank~78-01 37th Ave~177~305|78 Nail Spa~salon~35-58 78th St~168~298|Lemon Farm~grocery~77-17 37th Ave~168~305|Jackson Heights Greenmarket~shop~~215~164|Central Cafe~deli~79-01 37th Ave~206~304|Kitchen 79~restaurant~3770 79th St~198~376|Grocery~grocery~79-01 Northern Blvd~207~128|Super Fresh~grocery~78-17 Northern Blvd~191~125|The Queensboro~restaurant~80-02 Northern Blvd~238~139|Rainbowberry Frozen Yogurt~restaurant~80-01 37th Ave~236~305|Q&Q Discount~grocery~80-02 37th Ave~236~313|969 NYC Coffee~cafe~37-65 80th St~237~373|Pecoshitas~bakery~80-01 Roosevelt Ave~237~379|Cositas Ricas~restaurant~~228~379|Gourmet Deli~deli~80-01 Northern Blvd~237~129|Unisex Hair Salon~salon~79-21 Northern Blvd~227~129|D'Isabella Laundromat~laundry~31-08 81st St~257~29|NG Minimarket~grocery~31-06 81st St~257~27|Variety Bakery~bakery~80-28 Northern Blvd~257~138|Julietta~restaurant~37-63 81st St~266~373|Central Station Bar~bar~81-03 Roosevelt Ave~269~377|Pollos a la Brasa Mario~restaurant~81-01 Roosevelt Ave~267~377|Eyecare Center~optician~80-28 81st St~258~313|Stop & Carry~grocery~82-02 Northern Blvd~298~137|Shop~shop~81-27 37th Ave~287~304|Delicias Colombiana~bakery~37-03 82nd St~296~318|Restaurant~restaurant~37-07 82nd St~296~322|Bank~bank~37-15 82nd St~297~334|Electronics~electronics~~296~362|MNJ Enterprises~clothes~37-53 82nd St~301~367|Restaurant~restaurant~37-59 82nd St~297~371|Grab & Go Deli~deli~~297~374|\u00d3ptica Lopez~optician~~297~378|Bank~bank~37-06 82nd St~288~314|Clothing Store~clothes~37-32 82nd St~288~347|Clothing Store~clothes~37-50 82nd St~283~363|Shop~shop~37-66 82nd St~287~375|Restaurant~restaurant~81-11 Roosevelt Ave~287~378|Bryanna Deli Grocery~grocery~82-20 31st Ave~317~26|Galicia Bar~bar~83-02 Northern Blvd~327~137|Boulevard Theatre~service~82-22 Northern Blvd~317~138|Restaurant~restaurant~83-01 37th Ave~326~304|Pollos a la Brasa Mario~restaurant~83-02 37th Ave~326~313|Portabella~clothes~~317~379|Super Mi~deli~83-01 Northern Blvd~326~129|Seba Seba~restaurant~83-03 Northern Blvd~329~128|Pio Pio~restaurant~84-02 Northern Blvd~358~138|El Maguey~restaurant~83-28 Northern Blvd~348~138|El chivito d'oro~restaurant~84-02 37th Ave~357~313|Asadero La Fogata~restaurant~~357~128|Michael's Hair Salon & Tanning~salon~84-03 Northern Blvd~359~128|Restaurant~restaurant~84-23 37th Ave~377~305|La Gran Uruguaya~restaurant~85-02 37th Ave~386~313|Pio Pio~restaurant~84-21 Northern Blvd~378~129|Supreme Clientle Barbershop~salon~32-70 85th St~378~126|Bachue Restaurant & Bar~restaurant~86-2 37th Ave~416~313|Clipping Path Arts Inc.~service~3751 86th St~421~365|Electronics~electronics~~417~379|El Anzuelo Fino~restaurant~86-01 Northern Blvd~417~129|Restaurant~restaurant~87-10 Northern Blvd~448~138|Addictive Wine and Tapas~restaurant~87-01 Northern Blvd~447~129|American NY Bagel~bakery~86-19 Northern Blvd~437~129|Addictive Boutique Winery~bar~32-62 87th St~438~124|Restaurant~restaurant~87-10 Northern Blvd~466~138|7 Stars Deli & Grocery~deli~89-02 Northern Blvd~506~138|Performing Arts Conservatory of New York~service~35-57 89th St~507~296|La Gata Galosa~restaurant~89-01 37th Ave~506~304|Fortune Laundromat~laundry~35-56 89th St~496~296|Santa Fe Pharmacy~pharmacy~88-31 37th Ave~498~304|Bank~bank~89-01 Northern Blvd~507~128|New A & D Laundromat~laundry~90-9 31st Ave~545~18|iKlass Tutoring~service~90-11 35th Ave~537~244|A B Shirwaikar MD~clinic~~540~244|D&S Dental Center~dentist~~537~332|Buzzanca's Bakery & Cafe~bakery~~536~365|Roosevelt Cardiovascular Diagnostic~clinic~37-51A 90th St~536~365|B & L Cosmetics~salon~37-53 90th St~536~367|Wine & Spirits~bar~37-55 90th St~536~369|Tacos Al Suadero~restaurant~37-57 90th St~536~370|Quick Stop~grocery~37-59 90th St~536~371|Charles Farm~grocery~~536~373|Max Bakery & Reataurant~bakery~37-63 90th St~536~375|Farmacia Al Kosto~pharmacy~37-65 90th St~536~377|Cosmos Eye Care~optician~90-01 Roosevelt Ave~536~379|Tristate Pharmacy~pharmacy~89-24 37th Ave~528~313|Family Dental Center Luz A Filion DDS~dentist~~527~358|Grocery~grocery~37-54 90th St~527~370|Vida Care Pharmacy~pharmacy~37-64 90th St~527~372|TK Mobile~electronics~37-66 90th St~527~373|90th Street Variety Store~shop~37-68 90th St~527~374|La Peque\u00f1a~restaurant~37-72 90th St~527~377|Kennedy Chicken~restaurant~89-21 Northern Blvd~527~129|Rose Hair Salon~salon~73-17 Broadway~38~367|Prince Gourmet Deli~grocery~74-10 Broadway~58~367|Manhattan Queens Pediatrics~clinic~~60~368|Moss Dermatology~clinic~~61~369|Khalil Biryani House~restaurant~7410 Broadway~62~368|Forest Hills Gastroenterology~clinic~~62~369|Cohen Eye Institute~clinic~74-10 Broadway~66~369|Dhaka Pharmacy~pharmacy~74-32 Broadway~78~373|Broadway Wine & Liquor~bar~73-20 Broadway~46~364|Chung Ki Wa~restaurant~~45~365|Huong Xuan~restaurant~40-10 74th St~44~367|New York Presbyterian~clinic~73-15 Northern Blvd~44~128|Liquor Depot~bar~73-04 Northern Blvd~29~138|Armondo's~restaurant~73-16 Northern Blvd~41~138|Auto & Bike Shop~hardware~~101~128|Auto & Bike Shop~hardware~~126~127|New York Community Bank~bank~76-02 Northern Blvd~127~141|Auto & Bike Shop~hardware~~157~144|Auto & Bike Shop~hardware~78-02 Northern Blvd~184~141|Cafe Salamanca~restaurant~79-09 Northern Blvd~210~128|Los Coritos~restaurant~79-11 Northern Blvd~219~128|Laundromat~laundry~80-05 Northern Blvd~241~129|Viva Pharmacy & Wellness~pharmacy~80-14 Northern Blvd~244~138|El Coyote~restaurant~80-18 Northern Blvd~247~138|El Perro~restaurant~80-26 Northern Blvd~256~138|Mi Tierra~grocery~81-02 Northern Blvd~271~137|Esperanza~salon~82-03 Northern Blvd~299~128|El Rumbero~restaurant~82-05 Northern Blvd~301~128|Parrilladas Sunrise~restaurant~83-11 Northern Blvd~338~128|Uncle Peter's~restaurant~83-15 Northern Blvd~342~129|Columbia Con Sabor~restaurant~83-17 Northern Blvd~344~129|Marina's Hardware~hardware~84-05 Northern Blvd~361~129|Mama's Empanadas~restaurant~~363~127|Latino Bites~restaurant~~371~128|Lechoneria NY II~restaurant~~373~128|D'Antigua~bar~~369~138|Ming Wok~restaurant~~375~138|Mama's Empanadas~restaurant~85-05 Northern Blvd~390~129|Furniture~hardware~85-19 Northern Blvd~405~129|La Caba\u00f1a Argentina~restaurant~86-07 Northern Blvd~424~129|Grocery~grocery~~424~138|El Paisa Bar~restaurant~89-05 Northern Blvd~451~129|Sol Inca~restaurant~87-07 Northern Blvd~453~129|Restaurant~restaurant~87-21 Northern Blvd~461~128|Feel Better Pharmacy~pharmacy~87-10 Northern Blvd~456~138|Miss Laser~salon~87-10 Northern Blvd~460~138|Restaurant~restaurant~87-10 Northern Blvd~463~138|Plazor Blues~restaurant~89-05 Northern Blvd~510~128|Om Wok~restaurant~89-17 Northern Blvd~523~128|Knights Cleaning~laundry~89-19 Northern Blvd~525~129|Pizza Pasta~restaurant~89-06 Northern Blvd~511~138|El Pollo Inka~restaurant~89-12 Northern Blvd~518~138|Sun Hing~restaurant~89-16 Northern Blvd~523~138|Akota Grocery and Halal Meat~grocery~40-04 73rd St~19~363|Nomad's Brew~cafe~72-22 Roosevelt Ave~9~362|Clinic~clinic~73-02 Roosevelt Ave~29~363|Rainbow Bakery~bakery~73-18 Broadway~39~362|Medrite Pharmacy~pharmacy~73-16 Roosevelt Ave~39~391|Eyebrows~salon~74-01B Roosevelt Ave~65~374|Restaurant~restaurant~74-13 Roosevelt Ave~71~373|Nepali Bhanchha Ghar~restaurant~74-15 Roosevelt Ave~72~374|Coffee Shop~cafe~~89~373|Homemade Taquer\u00eda~restaurant~75-05 Roosevelt Ave~99~374|Khampa Kitchen Inn~restaurant~75-15 Roosevelt Ave~105~373|Scorpion~bar~~104~391|75 Blue Bar~bar~~106~392|Queens El California Bar~bar~76-03 Roosevelt Ave~120~373|Queens Romantico Bar~bar~76-07 Roosevelt Ave~124~373|Grocery Coatzingo~grocery~76-11 Roosevelt Ave~128~373|Crystal Fashion Hair~salon~76-13 Roosevelt Ave~130~373|Electronics~electronics~76-15 Roosevelt Ave~132~373|Todo Rico Bakery~bakery~76-17 Roosevelt Ave~134~373|Los Arrieros~restaurant~76-02 Roosevelt Ave~116~391|Mira Cali~bakery~76-04 Roosevelt Ave~123~391|Birria-Landia~restaurant~77-99 Roosevelt Ave~146~380|Newscafe~books~77-05 Roosevelt Ave~150~379|Star Motors~hardware~77-11 Roosevelt Ave~156~373|Olympia Billiards Snooker Bar~bar~~146~392|Arepa Lady~restaurant~~147~389|99 Cents and Up~shop~77-14 Roosevelt Ave~162~387|London Boutique~shop~~178~379|Uno Cafe and Billiards~bar~78-01 Roosevelt Ave~181~378|Om Wok~restaurant~78-14 Roosevelt Ave~172~395|Famous Brands Clothes~clothes~78-14 Roosevelt Ave~174~386|NY Cheviolotte Bar~bar~78-14 Roosevelt Ave~177~386|Grocery~grocery~78-14 Roosevelt Ave~182~386|Star Furniture~hardware~78-14 Roosevelt Ave~184~386|LGV Bakery~bakery~78-14 Roosevelt Ave~188~386|Riko~restaurant~78-14 Roosevelt Ave~191~386|Zoni Language Center~service~40-01 79th St~198~392|Sebra~salon~~225~379|E Smoke & Convenience~shop~79-20 Roosevelt Ave~227~386|Pico De Gallo~restaurant~~246~379|Bank~bank~8019 Roosevelt Ave~256~379|E Smoke & Convenience~grocery~80-02 Roosevelt Ave~236~386|Copacabana~restaurant~80-26 Roosevelt Ave~256~386|5 de Mayo~grocery~81-06 Roosevelt Ave~271~385|Coffee Shop~cafe~82-02 Roosevelt Ave~297~386|99 Cent Pizza~restaurant~~306~386|Juquila~restaurant~~316~395|Roosevelt Shopping Center~shop~84-02 Roosevelt Ave~359~390|MacBell Cleaners II~shop~8430 Roosevelt Ave~375~385|84 NEWS inc. & Grocery~books~8430 Roosevelt Ave~377~386|Mariscos El Submarino~restaurant~~481~377|Nieves Tia Mimi~cafe~8914 Roosevelt Ave~504~387|Bank~bank~8322 Baxter Ave~341~393|Terraza 7~bar~40-19 Gleane St~352~392|Broadway Bakery~bakery~~538~390|Pollos Mario~restaurant~86-13 Roosevelt Ave~432~378";
+      const DOCK_RAW = "77 St & 31 Ave~130~15|31 Ave & 84 St~340~15|31 Ave & 86 St~419~28|32 Ave & 84 St~340~64|32 Ave & 75 St~70~64|32 Ave & 77 St~149~64|32 Ave & 81 St~250~64|90 St & 32 Ave~535~81|85 St & Northern Blvd~378~115|75 St & Northern Blvd~85~146|78 St & Northern Blvd~177~146|81 St & 34 Ave~258~175|34 Ave & 83 St~329~186|34 Ave & 74 St~59~186|34 Ave & 89 St~509~193|86 St & 35 Ave~415~233|81 St & 35 Ave~258~233|75 St & 35 Ave~85~258|74 St & 37 Ave~55~293|79 St & 37 Ave~198~318|86 St & 37 Ave~408~318|75 St & Roosevelt Ave~85~395|Elmhurst Ave & Roosevelt Ave~535~364|84 St & Roosevelt Ave~355~364|87 St & Roosevelt Ave~438~364|79 St & Roosevelt Ave~190~391";
+
+      const C = {
+        outline: '#2a1f3d',
+        grass: '#88c999',
+        grassDark: '#68b07b',
+        sidewalk: '#f6dccb',
+        sidewalkSeam: '#dcb9a8',
+        road: '#62667a',
+        roadDark: '#4f5263',
+        curb: '#8f8794',
+        curbLight: '#fff4ea',
+        marking: '#ffd46e',
+        elShadow: '#434659',
+        steel: '#6f8aa0',
+        plaza: '#f3dfb6',
+        plazaSeam: '#ddc394',
+        paseoGreen: '#2d9d6a',
+        paseoStripe: '#a3f7bf',
+        roofTar: '#4a4e69',
+        roofCoop: '#7a5980',
+        brickSun: '#e08e79',
+        brickShade: '#a85a4c',
+        terracottaSun: '#f4a261',
+        terracottaShade: '#bc6c25',
+      };
+
+      function worldToIso(wx, wy, zPx) {
+        return {
+          screenX: wx - wy,
+          screenY: (wx + wy) * 0.5 - (zPx || 0),
+        };
+      }
+
+      function isoToWorld(sx, sy) {
+        return {
+          worldX: sx * 0.5 + sy,
+          worldY: sy - sx * 0.5,
+        };
+      }
+
+      function worldToWgs84(wx, wy) {
+        const mx = (wx - 22 * TILE_SIZE) * METERS_PER_PIXEL;
+        const my = (wy - 308 * TILE_SIZE) * METERS_PER_PIXEL;
+        const rawEast = mx * COS_ROT + my * SIN_ROT;
+        const rawNorth = mx * SIN_ROT - my * COS_ROT;
+        return {
+          lat: ORIGIN_LAT + rawNorth / METERS_PER_DEG_LAT,
+          lon: ORIGIN_LON + rawEast / METERS_PER_DEG_LON,
+        };
+      }
+
+      // Unpack segments, rasterize 554x436 ground & collision grids, and generate block buildings + trees
+      const groundGrid = new Uint8Array(MAP_W * MAP_H);
+      const BIN_TILES = 32;
+      const BIN_COLS = Math.ceil(MAP_W / BIN_TILES);
+      const BIN_ROWS = Math.ceil(MAP_H / BIN_TILES);
+      const buildingBins = Array.from({ length: BIN_COLS * BIN_ROWS }, () => []);
+      const treeBins = Array.from({ length: BIN_COLS * BIN_ROWS }, () => []);
+
+      const segments = SEG_RAW.split('|').map((item, idx) => {
+        const parts = item.split(',');
+        const tx1 = Number(parts[0]), ty1 = Number(parts[1]);
+        const tx2 = Number(parts[2]), ty2 = Number(parts[3]);
+        const hw = Number(parts[4]);
+        const flags = Number(parts[5]);
+        const streetName = parts[6] || 'Jackson Heights';
+        return {
+          id: 'seg-' + idx,
+          tx1, ty1, tx2, ty2,
+          x1: tx1 * TILE_SIZE + 8,
+          y1: ty1 * TILE_SIZE + 8,
+          x2: tx2 * TILE_SIZE + 8,
+          y2: ty2 * TILE_SIZE + 8,
+          hwTiles: hw,
+          halfWidthPx: hw * TILE_SIZE,
+          isPlaza: Boolean(flags & 1),
+          isPaseo: Boolean(flags & 2),
+          hasEl7: Boolean(flags & 4),
+          isHistoric: Boolean(flags & 8) || (ty1 >= 180 && ty1 <= 260 && tx1 >= 140 && tx1 <= 445),
+          streetName,
+        };
+      });
+
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const minTx = Math.max(0, Math.min(seg.tx1, seg.tx2) - seg.hwTiles - 3);
+        const maxTx = Math.min(MAP_W - 1, Math.max(seg.tx1, seg.tx2) + seg.hwTiles + 3);
+        const minTy = Math.max(0, Math.min(seg.ty1, seg.ty2) - seg.hwTiles - 3);
+        const maxTy = Math.min(MAP_H - 1, Math.max(seg.ty1, seg.ty2) + seg.hwTiles + 3);
+        const dx = seg.tx2 - seg.tx1;
+        const dy = seg.ty2 - seg.ty1;
+        const lenSq = dx * dx + dy * dy || 1;
+
+        for (let ty = minTy; ty <= maxTy; ty++) {
+          const rowOff = ty * MAP_W;
+          for (let tx = minTx; tx <= maxTx; tx++) {
+            const t = Math.max(0, Math.min(1, ((tx - seg.tx1) * dx + (ty - seg.ty1) * dy) / lenSq));
+            const px = seg.tx1 + t * dx;
+            const py = seg.ty1 + t * dy;
+            const d = Math.hypot(tx - px, ty - py);
+            if (d <= seg.hwTiles - 1.1) {
+              const endDist = Math.min(Math.hypot(tx - seg.tx1, ty - seg.ty1), Math.hypot(tx - seg.tx2, ty - seg.ty2));
+              if (endDist <= seg.hwTiles && endDist >= seg.hwTiles - 2.1) {
+                groundGrid[rowOff + tx] = 3; // crosswalk
+              } else if (seg.isPlaza) {
+                groundGrid[rowOff + tx] = 5; // plaza
+              } else if (seg.isPaseo) {
+                groundGrid[rowOff + tx] = 4; // 34th Ave Paseo bike lane
+              } else if (seg.hasEl7) {
+                groundGrid[rowOff + tx] = 6; // El 7 shadow road
+              } else {
+                groundGrid[rowOff + tx] = 2; // road
+              }
+            } else if (d <= seg.hwTiles - 0.2) {
+              if (groundGrid[rowOff + tx] < 2) groundGrid[rowOff + tx] = 7; // curb
+            } else if (d <= seg.hwTiles + 2.8) {
+              if (groundGrid[rowOff + tx] === 0) groundGrid[rowOff + tx] = 1; // sidewalk
+            }
+          }
+        }
+      }
+
+      // Populate dense building blocks and street trees along every block face
+      segments.forEach((seg, idx) => {
+        const dx = seg.x2 - seg.x1;
+        const dy = seg.y2 - seg.y1;
+        const len = Math.hypot(dx, dy);
+        if (len < 72) return;
+        const ux = dx / len, uy = dy / len;
+        const nx = -uy, ny = ux;
+        const count = Math.max(1, Math.min(4, Math.floor(len / 88)));
+
+        for (const sideSign of [-1, 1]) {
+          for (let k = 0; k < count; k++) {
+            const t = (k + 0.5) / count;
+            const distFromCenter = seg.halfWidthPx + 42;
+            const cx = seg.x1 + dx * t + nx * distFromCenter * sideSign;
+            const cy = seg.y1 + dy * t + ny * distFromCenter * sideSign;
+            const tx = Math.floor(cx / TILE_SIZE) - 1;
+            const ty = Math.floor(cy / TILE_SIZE) - 1;
+            if (tx < 2 || ty < 2 || tx >= MAP_W - 6 || ty >= MAP_H - 6) continue;
+            if (groundGrid[ty * MAP_W + tx] !== 0 || groundGrid[(ty + 2) * MAP_W + (tx + 2)] !== 0) continue;
+
+            const tw = 3 + ((idx + k) % 2);
+            const th = 3 + ((idx * 3 + k) % 2);
+            const stories = seg.isHistoric ? 5 + ((idx + k) % 2) : 3 + (k % 2);
+            const bObj = {
+              x: tx * TILE_SIZE,
+              y: ty * TILE_SIZE,
+              w: tw * TILE_SIZE,
+              h: th * TILE_SIZE,
+              zHeight: stories * 5.5,
+              stories,
+              kind: seg.isHistoric ? 'coop' : seg.hasEl7 ? 'storefront' : 'walkup',
+              hasWaterTower: seg.isHistoric && k === 0 && sideSign === 1,
+              variant: (idx + k) % 4,
+            };
+            const bx = Math.min(BIN_COLS - 1, Math.max(0, Math.floor(tx / BIN_TILES)));
+            const by = Math.min(BIN_ROWS - 1, Math.max(0, Math.floor(ty / BIN_TILES)));
+            buildingBins[by * BIN_COLS + bx].push(bObj);
+
+            const treeWx = seg.x1 + dx * t + nx * (seg.halfWidthPx + 10) * sideSign;
+            const treeWy = seg.y1 + dy * t + ny * (seg.halfWidthPx + 10) * sideSign;
+            treeBins[by * BIN_COLS + bx].push({
+              worldX: treeWx,
+              worldY: treeWy,
+              phase: (idx + k) * 1.3,
+              freq: 0.0026,
+            });
+          }
+        }
+      });
+
+      // Elevated 7 Train steel support columns along Roosevelt Avenue (ty = 382)
+      const elPillars = [];
+      for (let tx = 26; tx <= 530; tx += 15) {
+        elPillars.push({
+          worldX: tx * TILE_SIZE + 8,
+          worldYNorth: 376 * TILE_SIZE,
+          worldYSouth: 389 * TILE_SIZE,
+          centerY: 382 * TILE_SIZE + 8,
+        });
+      }
+
+      // Animated 7 Express Subway Train along Roosevelt Avenue
+      const elTrain = {
+        worldX: 60 * TILE_SIZE,
+        worldY: 382 * TILE_SIZE + 8,
+        dir: 1,
+        speed: 195,
+        cars: 4,
+      };
+
+      const AWNING_COLORS = ['#e11d48', '#059669', '#2563eb', '#d97706', '#7c3aed', '#0d9488'];
+      const businesses = BIZ_RAW.split('|').map((item, idx) => {
+        const p = item.split('~');
+        const tx = Number(p[3]), ty = Number(p[4]);
+        return {
+          id: 'biz-' + idx,
+          name: p[0],
+          category: p[1],
+          address: p[2],
+          worldX: tx * TILE_SIZE + 8,
+          worldY: ty * TILE_SIZE + 8,
+          awningColor: AWNING_COLORS[idx % AWNING_COLORS.length],
+        };
+      });
+
+      const bikeDocks = DOCK_RAW.split('|').map((item, idx) => {
+        const p = item.split('~');
+        const tx = Number(p[1]), ty = Number(p[2]);
+        return {
+          dockId: 'dock-' + (idx + 1),
+          label: p[0],
+          worldX: tx * TILE_SIZE + 8,
+          worldY: ty * TILE_SIZE + 8,
+          bikes: 3,
+          slots: 5,
+        };
+      });
+
+      const roadSegments = segments.filter((s) => !s.isPlaza && !s.isPaseo && Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > 100);
+      const trafficVehicles = Array.from({ length: 22 }, (_, i) => {
+        const seg = roadSegments[(i * 7) % roadSegments.length];
+        const colors = ['#f7b801', '#e63946', '#0077b6', '#d8f3dc'];
+        return {
+          seg,
+          t: (i * 0.19) % 1,
+          dir: i % 2 === 0 ? 1 : -1,
+          speed: 56 + (i % 4) * 10,
+          color: colors[i % colors.length],
+          worldX: seg.x1,
+          worldY: seg.y1,
+        };
+      });
+
+      const socialSegments = segments.filter((s) => s.isPlaza || s.isPaseo);
+      const plazaPedestrians = Array.from({ length: 24 }, (_, i) => {
+        const seg = socialSegments[i % Math.max(1, socialSegments.length)];
+        const colors = ['#ff8f7a', '#6fcfc4', '#ffd46e', '#c7a6e6', '#7ee08a'];
+        return {
+          seg,
+          t: (i * 0.23) % 1,
+          dir: i % 2 === 0 ? 1 : -1,
+          speed: 22 + (i % 3) * 6,
+          color: colors[i % colors.length],
+          worldX: seg.x1,
+          worldY: seg.y1,
+        };
+      });
+
+      const phayulBiz = businesses.find((b) => b.name === 'Phayul') || businesses[0];
+      const dispatcherNpc = {
+        name: 'Dispatcher',
+        worldX: phayulBiz.worldX - 32,
+        worldY: phayulBiz.worldY + 16,
+      };
+
+      const ICONIC_DISHES = {
+        'Phayul': ['Steamed Beef Momos', 'Thenthuk Noodle Soup', 'Tibetan Butter Tea'],
+        'Jackson Diner': ['Masala Dosa Thali', 'Tandoori Platter', 'Samosa Chaat'],
+        'Patel Brothers': ['Alphonso Mango Box', 'Fresh Curry Leaves & Spices', 'Khakhra Crisp Bundle'],
+        'Arepa Lady': ['Arepa de Queso', 'Arepa Reina Pepiada', 'Sweet Corn Choclo'],
+        'Birria-Landia': ['Consomé & Birria Tacos', 'Quesabirria Mulita', 'Beef Tostada'],
+        'Nepali Bhanchha Ghar': ['Jhol Momo Platter', 'Sel Roti Ring Bread', 'Thakali Set'],
+        'Espresso 77': ['Double Cortado', 'Guava Cheese Pastry', 'Iced Oat Chai'],
+      };
+
+      let audioCtx = null;
+      let audioMuted = false;
+      function playTone(freq, durationMs, type, gainVal) {
+        if (audioMuted) return;
+        try {
+          if (!audioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) audioCtx = new AC();
+          }
+          if (!audioCtx) return;
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type || 'triangle';
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(gainVal || 0.07, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (durationMs || 80) / 1000);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + (durationMs || 80) / 1000);
+        } catch (_e) {}
+      }
+
+      function playSfx(kind) {
+        if (kind === 'pickup') {
+          playTone(523.25, 80, 'square', 0.07);
+          setTimeout(() => playTone(659.25, 110, 'square', 0.07), 70);
+        } else if (kind === 'delivered') {
+          playTone(523.25, 80, 'triangle', 0.09);
+          setTimeout(() => playTone(659.25, 80, 'triangle', 0.09), 75);
+          setTimeout(() => playTone(783.99, 150, 'triangle', 0.09), 150);
+        } else if (kind === 'bike') {
+          playTone(440, 65, 'sine', 0.08);
+          setTimeout(() => playTone(587.33, 95, 'sine', 0.08), 60);
+        } else if (kind === 'blocked') {
+          playTone(160, 90, 'sawtooth', 0.06);
+        } else {
+          playTone(392, 55, 'triangle', 0.06);
+        }
+      }
+
+      const state = {
+        viewMode: 'iso',
+        controlMode: 'grid',
+        pixelZoom: 2,
+        worldX: dispatcherNpc.worldX,
+        worldY: dispatcherNpc.worldY,
+        riding: false,
+        speedLevel: 0,
+        earnings: 0,
+        completedCount: 0,
+        deliveryHistory: [],
+        activeOrder: null,
+        nearbyBusiness: null,
+        nearbyDock: null,
+        modalOpen: false,
+        inspectedBusiness: null,
+        surfaceToastUntil: 0,
+        surfaceToastText: '',
+      };
+
+      // Compute dynamic intersection & neighborhood zone from player world coordinates
+      function resolveCornerAndZone(wx, wy) {
+        const tx = wx / TILE_SIZE;
+        const ty = wy / TILE_SIZE;
+
+        // Nearest numbered street (73rd St at tx=22, +30 tiles per street up to 90th St at tx=532)
+        const stNum = Math.max(73, Math.min(90, Math.round(73 + (tx - 22) / 30)));
+        const stSuffix = stNum === 73 || stNum === 83 ? 'rd' : stNum === 81 ? 'st' : stNum === 82 ? 'nd' : 'th';
+        const streetLabel = stNum + stSuffix + ' St';
+
+        // Nearest avenue corridor
+        const aveList = [
+          { y: 22, name: '31st Ave', zone: 'Upper 31st Corridor' },
+          { y: 71, name: '32nd Ave', zone: '32nd Ave Residential' },
+          { y: 133, name: 'Northern Blvd', zone: 'Northern Blvd Commercial' },
+          { y: 190, name: '34th Ave', zone: '34th Ave Open Street Paseo' },
+          { y: 248, name: '35th Ave', zone: 'Historic Garden District' },
+          { y: 308, name: '37th Ave', zone: '37th Ave Little India & Shops' },
+          { y: 354, name: '37th Rd', zone: 'Diversity Plaza / Little Tibet' },
+          { y: 382, name: 'Roosevelt Ave', zone: 'Roosevelt Ave El 7 Corridor' },
+        ];
+        let bestAve = aveList[0];
+        let bestDist = Infinity;
+        for (let i = 0; i < aveList.length; i++) {
+          const d = Math.abs(ty - aveList[i].y);
+          if (d < bestDist) {
+            bestDist = d;
+            bestAve = aveList[i];
+          }
+        }
+        if (tx < 75 && ty >= 340 && ty <= 370) {
+          return { zone: 'Diversity Plaza', corner: streetLabel + ' & 37th Rd' };
+        }
+        return {
+          zone: bestAve.zone,
+          corner: streetLabel + ' & ' + bestAve.name,
+        };
+      }
+
+      function classifySurfaceAtWorld(wx, wy) {
+        for (let i = 0; i < bikeDocks.length; i++) {
+          const dock = bikeDocks[i];
+          if (Math.hypot(wx - dock.worldX, wy - dock.worldY) <= 26) {
+            return { kind: 'dock-apron', label: 'Bike Dock Apron', rideable: true, walkable: true };
+          }
+        }
+        const tx = Math.floor(wx / TILE_SIZE);
+        const ty = Math.floor(wy / TILE_SIZE);
+        if (tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H) {
+          const g = groundGrid[ty * MAP_W + tx];
+          if (g === 4) return { kind: 'paseo-bike-lane', label: '34th Ave Paseo Bike Lane', rideable: true, walkable: true };
+          if (g === 5) return { kind: 'pedestrian-plaza', label: 'Pedestrian Plaza', rideable: true, walkable: true };
+          if (g === 3) return { kind: 'crosswalk', label: 'Crosswalk', rideable: true, walkable: true };
+          if (g === 2 || g === 6) return { kind: 'roadway', label: 'Street Roadway', rideable: true, walkable: true };
+          if (g === 1 || g === 7) return { kind: 'sidewalk', label: 'Sidewalk (Walk Only)', rideable: false, walkable: true };
+          return { kind: 'courtyard', label: 'Garden / Block', rideable: false, walkable: true };
+        }
+        return { kind: 'sidewalk', label: 'Sidewalk', rideable: false, walkable: true };
+      }
+
+      function snapToNearestRideableOrWalkable(wx, wy) {
+        for (let r = 0; r <= 8; r++) {
+          const offsets = [[0, r * 16], [0, -r * 16], [r * 16, 0], [-r * 16, 0], [r * 16, r * 16], [-r * 16, r * 16]];
+          for (let i = 0; i < offsets.length; i++) {
+            const cx = wx + offsets[i][0];
+            const cy = wy + offsets[i][1];
+            const surf = classifySurfaceAtWorld(cx, cy);
+            if (state.riding ? surf.rideable : surf.walkable) return { x: cx, y: cy };
+          }
+        }
+        return { x: wx, y: wy };
+      }
+
+      function compassBearing(dx, dy) {
+        const dirs = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+        const ang = Math.atan2(dy, dx);
+        const idx = Math.round(((ang + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
+        return dirs[idx];
+      }
+
+      function updateOrderHud() {
+        const ord = state.activeOrder;
+        if (!ord) return;
+        const isPickup = ord.status === 'assigned';
+        const pill = document.getElementById('order-status-pill');
+        pill.textContent = isPickup ? 'PICKUP' : 'DELIVER';
+        pill.style.background = isPickup ? '#f59e0b' : '#10b981';
+        document.getElementById('order-item-title').textContent = ord.dish + ' ($' + ord.reward + ')';
+        const target = isPickup ? ord.pickup : ord.dropoff;
+        document.getElementById('order-step-desc').textContent = (isPickup ? 'Pick up at ' : 'Deliver to ') + target.name;
+        document.getElementById('hud-earnings').textContent = String(state.earnings);
+        document.getElementById('hud-completed-count').textContent = String(state.completedCount);
+      }
+
+      function pickDynamicOrder(preferredPickupBiz) {
+        const iconicList = businesses.filter((b) => ICONIC_DISHES[b.name]);
+        const pickup =
+          preferredPickupBiz ||
+          (state.completedCount < iconicList.length
+            ? iconicList[state.completedCount % iconicList.length]
+            : businesses[(state.completedCount * 29 + 7) % businesses.length]);
+        let dropoff = businesses[(businesses.indexOf(pickup) + 83) % businesses.length];
+        if (dropoff.id === pickup.id) dropoff = businesses[(businesses.indexOf(pickup) + 1) % businesses.length];
+        const dishes = ICONIC_DISHES[pickup.name] || ['Hot Neighborhood Special', 'Fresh Counter Parcel', 'Express Order'];
+        const dish = dishes[state.completedCount % dishes.length];
+        const distMeters = Math.round(Math.hypot(dropoff.worldX - pickup.worldX, dropoff.worldY - pickup.worldY) * METERS_PER_PIXEL);
+        const reward = Math.max(8, Math.min(32, 8 + Math.round(distMeters / 90)));
+        state.activeOrder = { status: 'assigned', dish, pickup, dropoff, reward };
+        updateOrderHud();
+      }
+
+      const keysDown = new Set();
+      let stickVector = { x: 0, y: 0 };
+
+      window.addEventListener('keydown', (e) => {
+        if (document.activeElement && document.activeElement.id === 'search-input') {
+          if (e.key === 'Escape') toggleSearchDrawer(false);
+          return;
+        }
+        const k = e.key.toLowerCase();
+        if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab'].includes(k)) e.preventDefault();
+        if (k === 'v' || k === 'tab') { toggleViewMode(); return; }
+        if (k === 'c') { toggleControlAxes(); return; }
+        if (k === ' ' || k === 'enter' || k === 'z') { triggerAction(); return; }
+        if (['0', '1', '2', '3'].includes(k)) { setSpeedMultiplier(Number(k)); return; }
+        keysDown.add(k);
+      });
+
+      window.addEventListener('keyup', (e) => {
+        keysDown.delete(e.key.toLowerCase());
+      });
+
+      const stickBase = document.getElementById('stick-base');
+      const stickKnob = document.getElementById('stick-knob');
+      let activePointerId = null;
+
+      function updateStickFromPointer(e) {
+        const r = stickBase.getBoundingClientRect();
+        const radius = r.width * 0.5 || 42;
+        const dx = (e.clientX - (r.left + radius)) / radius;
+        const dy = (e.clientY - (r.top + radius)) / radius;
+        const mag = Math.hypot(dx, dy);
+        if (mag < 0.18) {
+          stickVector = { x: 0, y: 0 };
+          stickKnob.style.transform = 'translate(0px, 0px)';
+          return;
+        }
+        const clamped = Math.min(1, mag);
+        const nx = dx / mag, ny = dy / mag;
+        stickVector = { x: nx, y: ny };
+        const maxTravel = radius * 0.48;
+        stickKnob.style.transform = 'translate(' + Math.round(nx * clamped * maxTravel) + 'px, ' + Math.round(ny * clamped * maxTravel) + 'px)';
+      }
+
+      stickBase.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        activePointerId = e.pointerId;
+        try { stickBase.setPointerCapture(e.pointerId); } catch (_err) {}
+        updateStickFromPointer(e);
+      });
+      stickBase.addEventListener('pointermove', (e) => {
+        if (e.pointerId === activePointerId) updateStickFromPointer(e);
+      });
+      const releaseStick = (e) => {
+        if (e.pointerId === activePointerId) {
+          activePointerId = null;
+          stickVector = { x: 0, y: 0 };
+          stickKnob.style.transform = 'translate(0px, 0px)';
+        }
+      };
+      stickBase.addEventListener('pointerup', releaseStick);
+      stickBase.addEventListener('pointercancel', releaseStick);
+
+      function toggleViewMode() {
+        state.viewMode = state.viewMode === 'iso' ? 'topdown' : 'iso';
+        const isIso = state.viewMode === 'iso';
+        document.getElementById('view-mode-badge').textContent = isIso ? '2:1 ISO' : 'TOP-DOWN';
+        document.getElementById('label-toggle-view').textContent = isIso ? '📐 Iso' : '🗺️ Top';
+        document.getElementById('btn-toggle-view').classList.toggle('active', isIso);
+        playSfx('talk');
+      }
+
+      function toggleControlAxes() {
+        state.controlMode = state.controlMode === 'grid' ? 'screen' : 'grid';
+        const isGrid = state.controlMode === 'grid';
+        document.getElementById('label-toggle-axes').textContent = isGrid ? 'Grid' : 'Screen';
+        document.getElementById('btn-toggle-axes').classList.toggle('active', !isGrid);
+        playSfx('talk');
+      }
+
+      function setSpeedMultiplier(level) {
+        state.speedLevel = level;
+        document.querySelectorAll('.speed-btn').forEach((btn) => {
+          btn.classList.toggle('active', Number(btn.dataset.speed) === level);
+        });
+        playSfx('talk');
+      }
+
+      function toggleBikeRental() {
+        if (!state.riding) {
+          if (state.nearbyDock && state.nearbyDock.bikes > 0) state.nearbyDock.bikes--;
+          state.riding = true;
+          if (!classifySurfaceAtWorld(state.worldX, state.worldY).rideable) {
+            const pt = snapToNearestRideableOrWalkable(state.worldX, state.worldY);
+            state.worldX = pt.x;
+            state.worldY = pt.y;
+          }
+        } else {
+          if (state.nearbyDock && state.nearbyDock.bikes < state.nearbyDock.slots) state.nearbyDock.bikes++;
+          state.riding = false;
+        }
+        document.getElementById('rider-mode-badge').textContent = state.riding ? 'BIKE-SHARE' : 'ON FOOT';
+        document.getElementById('rider-mode-badge').style.background = state.riding ? '#0284c7' : '#d97706';
+        document.getElementById('label-quick-bike').textContent = state.riding ? '🚶 Walk' : '🚲 Bike';
+        document.getElementById('btn-quick-bike').classList.toggle('active', state.riding);
+        playSfx('bike');
+      }
+
+      function renderStorefrontInteriorCanvas(biz) {
+        const c = document.getElementById('interior-canvas');
+        const ic = c.getContext('2d');
+        ic.clearRect(0, 0, c.width, c.height);
+
+        for (let y = 48; y < c.height; y += 16) {
+          for (let x = 0; x < c.width; x += 16) {
+            ic.fillStyle = ((x + y) / 16) % 2 === 0 ? '#e6ccb2' : '#ddb892';
+            ic.fillRect(x, y, 16, 16);
+          }
+        }
+        ic.fillStyle = '#3d2c2e';
+        ic.fillRect(0, 0, c.width, 50);
+        ic.fillStyle = biz.awningColor || '#c84b31';
+        for (let x = 0; x < c.width; x += 24) ic.fillRect(x, 0, 12, 12);
+
+        ic.fillStyle = '#5c3c24';
+        ic.fillRect(40, 58, 240, 24);
+        ic.strokeStyle = '#2a1f3d';
+        ic.lineWidth = 2;
+        ic.strokeRect(40, 58, 240, 24);
+
+        ic.fillStyle = '#2a1f3d';
+        ic.fillRect(148, 30, 24, 28);
+        ic.fillStyle = '#f0c39a';
+        ic.fillRect(152, 34, 16, 10);
+        ic.fillStyle = '#6fcfc4';
+        ic.fillRect(150, 44, 20, 14);
+
+        for (let i = 0; i < 3; i++) {
+          ic.fillStyle = '#ffd46e';
+          ic.fillRect(72 + i * 72, 64, 22, 12);
+          ic.strokeRect(72 + i * 72, 64, 22, 12);
+        }
+
+        ic.fillStyle = '#fffaf0';
+        ic.font = 'bold 11px monospace';
+        ic.fillText(biz.name + (biz.address ? ' — ' + biz.address : ''), 12, 26);
+      }
+
+      function openStorefrontModal(biz, extraMessage) {
+        state.modalOpen = true;
+        state.inspectedBusiness = biz;
+        document.getElementById('dialogue-modal').classList.remove('hidden');
+        document.getElementById('modal-badge').textContent = (biz.category || 'STOREFRONT').toUpperCase();
+        document.getElementById('modal-title').textContent = biz.name + (biz.address ? ' (' + biz.address + ')' : '');
+        renderStorefrontInteriorCanvas(biz);
+
+        const dishes = ICONIC_DISHES[biz.name] || ['House Special Platter', 'Neighborhood Express Parcel', 'Fresh Counter Spec'];
+        const bodyEl = document.getElementById('modal-body');
+        bodyEl.innerHTML = '';
+        if (extraMessage) {
+          const pAlert = document.createElement('div');
+          pAlert.style.cssText = 'font-weight:700;color:#6ee7b7;background:rgba(6,78,59,0.85);border:1px solid #34d399;border-radius:6px;padding:6px 8px;';
+          pAlert.textContent = extraMessage;
+          bodyEl.appendChild(pAlert);
+        }
+        const p1 = document.createElement('div');
+        p1.textContent = 'Welcome inside ' + biz.name + '! Fresh orders prepped daily in Jackson Heights.';
+        const p2 = document.createElement('div');
+        p2.style.cssText = 'color:#fde68a;font-weight:600;';
+        p2.textContent = 'Menu: ' + dishes.join(' • ');
+        bodyEl.appendChild(p1);
+        bodyEl.appendChild(p2);
+      }
+
+      function closeStorefrontModal() {
+        state.modalOpen = false;
+        document.getElementById('dialogue-modal').classList.add('hidden');
+      }
+
+      function renderDeliveryLog() {
+        const logEl = document.getElementById('delivery-log-list');
+        if (state.deliveryHistory.length === 0) {
+          logEl.textContent = 'No deliveries completed yet. Head to the flashing marker and press ACTION!';
+          return;
+        }
+        logEl.innerHTML = state.deliveryHistory
+          .slice()
+          .reverse()
+          .map((entry, idx) => `<div style="padding: 3px 0; border-bottom: 1px dashed rgba(255,255,255,0.1);">#${state.deliveryHistory.length - idx}: <b>${entry.dish}</b> (${entry.from} → ${entry.to}) <span style="color:#6ee7b7;">+$${entry.reward}</span></div>`)
+          .join('');
+      }
+
+      function triggerAction() {
+        if (state.modalOpen) {
+          closeStorefrontModal();
+          return;
+        }
+        if (!document.getElementById('guide-modal').classList.contains('hidden')) {
+          document.getElementById('guide-modal').classList.add('hidden');
+          return;
+        }
+        if (state.activeOrder) {
+          const ord = state.activeOrder;
+          const target = ord.status === 'assigned' ? ord.pickup : ord.dropoff;
+          const distToTarget = Math.hypot(state.worldX - target.worldX, state.worldY - target.worldY);
+          if (distToTarget <= 58) {
+            if (ord.status === 'assigned') {
+              ord.status = 'picked-up';
+              playSfx('pickup');
+              updateOrderHud();
+              openStorefrontModal(target, 'Picked up ' + ord.dish + ' from ' + target.name + '! Now deliver to ' + ord.dropoff.name + '.');
+              return;
+            } else {
+              const earned = ord.reward;
+              const deliveredDish = ord.dish;
+              const dropTarget = ord.dropoff;
+              state.earnings += earned;
+              state.completedCount++;
+              state.deliveryHistory.push({
+                dish: deliveredDish,
+                from: ord.pickup.name,
+                to: dropTarget.name,
+                reward: earned,
+              });
+              playSfx('delivered');
+              pickDynamicOrder();
+              openStorefrontModal(dropTarget, 'Delivered ' + deliveredDish + ' to ' + dropTarget.name + '! Earned +$' + earned + '.');
+              return;
+            }
+          }
+        }
+        if (state.nearbyDock && (!state.nearbyBusiness || Math.hypot(state.worldX - state.nearbyDock.worldX, state.worldY - state.nearbyDock.worldY) < 28)) {
+          toggleBikeRental();
+          return;
+        }
+        if (state.nearbyBusiness) {
+          playSfx('talk');
+          openStorefrontModal(state.nearbyBusiness);
+          return;
+        }
+        playSfx('talk');
+      }
+
+      function toggleSearchDrawer(force) {
+        const drawer = document.getElementById('search-drawer');
+        const show = typeof force === 'boolean' ? force : drawer.classList.contains('hidden');
+        drawer.classList.toggle('hidden', !show);
+        drawer.style.display = show ? 'flex' : 'none';
+        if (show) {
+          renderSearchResults(document.getElementById('search-input').value);
+          document.getElementById('search-input').focus();
+        }
+      }
+
+      function jumpToLocation(query) {
+        if (query === 'diversity') {
+          const pt = snapToNearestRideableOrWalkable(dispatcherNpc.worldX, dispatcherNpc.worldY);
+          state.worldX = pt.x;
+          state.worldY = pt.y;
+          playSfx('talk');
+          return;
+        }
+        if (query === 'paseo') {
+          const paseoSeg = segments.find((s) => s.isPaseo);
+          if (paseoSeg) {
+            const pt = snapToNearestRideableOrWalkable((paseoSeg.x1 + paseoSeg.x2) * 0.5, (paseoSeg.y1 + paseoSeg.y2) * 0.5);
+            state.worldX = pt.x;
+            state.worldY = pt.y;
+          }
+          playSfx('talk');
+          return;
+        }
+        const q = query.toLowerCase();
+        const biz =
+          businesses.find((b) => b.name.toLowerCase() === q) ||
+          businesses.find((b) => b.name.toLowerCase().includes(q));
+        if (biz) {
+          const pt = snapToNearestRideableOrWalkable(biz.worldX, biz.worldY + 12);
+          state.worldX = pt.x;
+          state.worldY = pt.y;
+          playSfx('pickup');
+        }
+      }
+
+      function renderSearchResults(filterText) {
+        const container = document.getElementById('search-results');
+        container.innerHTML = '';
+        const q = (filterText || '').trim().toLowerCase();
+        const matches = q
+          ? businesses.filter(
+              (b) =>
+                b.name.toLowerCase().includes(q) ||
+                (b.category && b.category.toLowerCase().includes(q)) ||
+                (b.address && b.address.toLowerCase().includes(q))
+            )
+          : businesses;
+
+        document.getElementById('search-count').textContent = String(matches.length);
+
+        matches.slice(0, 35).forEach((biz) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'retro-pill';
+          btn.style.cssText = 'justify-content:space-between;width:100%;text-align:left;';
+          btn.innerHTML = '<span class="truncate"><b>' + biz.name + '</b> <small style="color:#cbd5e1">' + (biz.address || biz.category) + '</small></span><span style="color:#fcd34d;flex-shrink:0;">Go →</span>';
+          btn.addEventListener('click', () => {
+            const pt = snapToNearestRideableOrWalkable(biz.worldX, biz.worldY + 12);
+            state.worldX = pt.x;
+            state.worldY = pt.y;
+            toggleSearchDrawer(false);
+            playSfx('pickup');
+          });
+          container.appendChild(btn);
+        });
+      }
+
+      document.getElementById('btn-toggle-view').addEventListener('click', toggleViewMode);
+      document.getElementById('btn-toggle-axes').addEventListener('click', toggleControlAxes);
+      document.getElementById('btn-quick-bike').addEventListener('click', toggleBikeRental);
+      document.getElementById('btn-action').addEventListener('click', triggerAction);
+      document.getElementById('btn-new-order').addEventListener('click', () => { pickDynamicOrder(); playSfx('pickup'); });
+      document.getElementById('btn-zoom-cycle').addEventListener('click', () => {
+        const zooms = [1.5, 2, 3];
+        state.pixelZoom = zooms[(zooms.indexOf(state.pixelZoom) + 1) % zooms.length];
+        document.getElementById('label-zoom').textContent = state.pixelZoom + 'x Px';
+        resizeCanvas();
+        playSfx('talk');
+      });
+      document.getElementById('btn-toggle-audio').addEventListener('click', () => {
+        audioMuted = !audioMuted;
+        document.getElementById('label-audio').textContent = audioMuted ? '🔇' : '🔊';
+      });
+      document.getElementById('btn-toggle-search').addEventListener('click', () => toggleSearchDrawer());
+      document.getElementById('btn-close-search').addEventListener('click', () => toggleSearchDrawer(false));
+      document.getElementById('search-input').addEventListener('input', (e) => renderSearchResults(e.target.value));
+      document.getElementById('btn-close-modal').addEventListener('click', closeStorefrontModal);
+      document.getElementById('btn-modal-ok').addEventListener('click', closeStorefrontModal);
+      document.getElementById('btn-modal-order').addEventListener('click', () => {
+        if (state.inspectedBusiness) {
+          pickDynamicOrder(state.inspectedBusiness);
+          playSfx('pickup');
+        }
+        closeStorefrontModal();
+      });
+
+      document.getElementById('btn-open-guide').addEventListener('click', () => {
+        renderDeliveryLog();
+        document.getElementById('guide-modal').classList.remove('hidden');
+        playSfx('talk');
+      });
+      document.getElementById('btn-close-guide').addEventListener('click', () => {
+        document.getElementById('guide-modal').classList.add('hidden');
+      });
+
+      document.querySelectorAll('.speed-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setSpeedMultiplier(Number(btn.dataset.speed)));
+      });
+      document.querySelectorAll('.jump-chip').forEach((chip) => {
+        chip.addEventListener('click', () => jumpToLocation(chip.dataset.jump));
+      });
+
+      const canvas = document.getElementById('game-canvas');
+      const ctx = canvas.getContext('2d');
+      const radarCanvas = document.getElementById('radar-canvas');
+      const radarCtx = radarCanvas.getContext('2d');
+
+      function resizeCanvas() {
+        const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+        canvas.width = Math.max(200, Math.floor(vw / state.pixelZoom));
+        canvas.height = Math.max(200, Math.floor(vh / state.pixelZoom));
+        ctx.imageSmoothingEnabled = false;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      canvas.addEventListener('click', (e) => {
+        if (state.modalOpen) return;
+        const rect = canvas.getBoundingClientRect();
+        const cx = (e.clientX - rect.left) / state.pixelZoom - canvas.width * 0.5;
+        const cy = (e.clientY - rect.top) / state.pixelZoom - canvas.height * 0.5;
+        let clickedWorld = null;
+        if (state.viewMode === 'iso') {
+          const playerIso = worldToIso(state.worldX, state.worldY, 0);
+          clickedWorld = isoToWorld(playerIso.screenX + cx, playerIso.screenY + cy);
+        } else {
+          clickedWorld = { worldX: state.worldX + cx, worldY: state.worldY + cy };
+        }
+        const hitBiz = businesses.find((b) => Math.hypot(b.worldX - clickedWorld.worldX, b.worldY - clickedWorld.worldY) < 26);
+        if (hitBiz && Math.hypot(hitBiz.worldX - state.worldX, hitBiz.worldY - state.worldY) < 130) {
+          openStorefrontModal(hitBiz);
+        }
+      });
+
+      function toScreen(wx, wy, zPx, camX, camY) {
+        if (state.viewMode === 'iso') {
+          const iso = worldToIso(wx, wy, zPx || 0);
+          return {
+            x: Math.round(iso.screenX - camX + canvas.width * 0.5),
+            y: Math.round(iso.screenY - camY + canvas.height * 0.5),
+          };
+        }
+        return {
+          x: Math.round(wx - camX + canvas.width * 0.5),
+          y: Math.round(wy - (zPx || 0) - camY + canvas.height * 0.5),
+        };
+      }
+
+      function tileStyleForCode(code, tx, ty) {
+        if (code === 4) return { fill: C.paseoGreen, mark: C.paseoStripe };
+        if (code === 5) return { fill: C.plaza, mark: C.plazaSeam };
+        if (code === 3) return { fill: C.road, mark: C.curbLight };
+        if (code === 6) return { fill: C.elShadow, mark: (tx + ty) % 2 === 0 ? C.steel : null };
+        if (code === 2) return { fill: C.road, mark: (tx + ty) % 3 === 0 ? C.marking : C.roadDark };
+        if (code === 7) return { fill: C.curb, mark: null };
+        if (code === 1) return { fill: C.sidewalk, mark: C.sidewalkSeam };
+        return { fill: C.grass, mark: (tx + ty) % 5 === 0 ? C.grassDark : null };
+      }
+
+      function drawQuad(points, fillStyle, strokeStyle) {
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.closePath();
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+        if (strokeStyle) {
+          ctx.strokeStyle = strokeStyle;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+
+      function drawVisibleGroundTiles(camX, camY) {
+        if (state.viewMode === 'topdown') {
+          const minTx = Math.max(0, Math.floor((camX - canvas.width * 0.5) / TILE_SIZE) - 1);
+          const maxTx = Math.min(MAP_W - 1, Math.ceil((camX + canvas.width * 0.5) / TILE_SIZE) + 1);
+          const minTy = Math.max(0, Math.floor((camY - canvas.height * 0.5) / TILE_SIZE) - 1);
+          const maxTy = Math.min(MAP_H - 1, Math.ceil((camY + canvas.height * 0.5) / TILE_SIZE) + 1);
+
+          for (let ty = minTy; ty <= maxTy; ty++) {
+            const rowOff = ty * MAP_W;
+            const sy = Math.round(ty * TILE_SIZE - camY + canvas.height * 0.5);
+            for (let tx = minTx; tx <= maxTx; tx++) {
+              const sx = Math.round(tx * TILE_SIZE - camX + canvas.width * 0.5);
+              const st = tileStyleForCode(groundGrid[rowOff + tx], tx, ty);
+              ctx.fillStyle = st.fill;
+              ctx.fillRect(sx, sy, TILE_SIZE, TILE_SIZE);
+              if (st.mark) {
+                ctx.fillStyle = st.mark;
+                ctx.fillRect(sx + 6, sy + 6, 4, 2);
+              }
+            }
+          }
+          return;
+        }
+
+        const halfW = canvas.width * 0.5 + 32;
+        const halfH = canvas.height * 0.5 + 32;
+        const corners = [
+          isoToWorld(camX - halfW, camY - halfH),
+          isoToWorld(camX + halfW, camY - halfH),
+          isoToWorld(camX + halfW, camY + halfH),
+          isoToWorld(camX - halfW, camY + halfH),
+        ];
+        const minTx = Math.max(0, Math.floor(Math.min(corners[0].worldX, corners[1].worldX, corners[2].worldX, corners[3].worldX) / TILE_SIZE) - 1);
+        const maxTx = Math.min(MAP_W - 1, Math.ceil(Math.max(corners[0].worldX, corners[1].worldX, corners[2].worldX, corners[3].worldX) / TILE_SIZE) + 1);
+        const minTy = Math.max(0, Math.floor(Math.min(corners[0].worldY, corners[1].worldY, corners[2].worldY, corners[3].worldY) / TILE_SIZE) - 1);
+        const maxTy = Math.min(MAP_H - 1, Math.ceil(Math.max(corners[0].worldY, corners[1].worldY, corners[2].worldY, corners[3].worldY) / TILE_SIZE) + 1);
+
+        const centerScreenX = canvas.width * 0.5 - camX;
+        const centerScreenY = canvas.height * 0.5 - camY;
+
+        for (let ty = minTy; ty <= maxTy; ty++) {
+          const rowOff = ty * MAP_W;
+          const wy = ty * TILE_SIZE;
+          for (let tx = minTx; tx <= maxTx; tx++) {
+            const wx = tx * TILE_SIZE;
+            const topX = Math.round(wx - wy + centerScreenX);
+            const topY = Math.round((wx + wy) * 0.5 + centerScreenY);
+            if (topX < -32 || topX > canvas.width + 32 || topY < -24 || topY > canvas.height + 24) continue;
+
+            const st = tileStyleForCode(groundGrid[rowOff + tx], tx, ty);
+            ctx.beginPath();
+            ctx.moveTo(topX, topY);
+            ctx.lineTo(topX + 16, topY + 8);
+            ctx.lineTo(topX, topY + 16);
+            ctx.lineTo(topX - 16, topY + 8);
+            ctx.closePath();
+            ctx.fillStyle = st.fill;
+            ctx.fill();
+
+            if (st.mark) {
+              ctx.fillStyle = st.mark;
+              ctx.fillRect(topX - 2, topY + 7, 4, 2);
+            }
+          }
+        }
+      }
+
+      function drawBuildingBlock(b, camX, camY) {
+        if (state.viewMode === 'topdown') {
+          const sx = Math.round(b.x - camX + canvas.width * 0.5);
+          const sy = Math.round(b.y - camY + canvas.height * 0.5);
+          if (sx + b.w < 0 || sx > canvas.width || sy + b.h < 0 || sy > canvas.height) return;
+
+          const roofH = Math.max(12, Math.floor(b.h * 0.55));
+          ctx.fillStyle = C.outline;
+          ctx.fillRect(sx, sy, b.w, b.h);
+          ctx.fillStyle = b.kind === 'coop' ? C.roofCoop : C.roofTar;
+          ctx.fillRect(sx + 1, sy + 1, b.w - 2, roofH);
+          ctx.fillStyle = b.kind === 'storefront' ? C.terracottaSun : C.brickSun;
+          ctx.fillRect(sx + 1, sy + roofH, b.w - 2, b.h - roofH - 1);
+          return;
+        }
+
+        const pNW = toScreen(b.x, b.y, 0, camX, camY);
+        const pNE = toScreen(b.x + b.w, b.y, 0, camX, camY);
+        const pSE = toScreen(b.x + b.w, b.y + b.h, 0, camX, camY);
+        const pSW = toScreen(b.x, b.y + b.h, 0, camX, camY);
+
+        if (
+          Math.max(pNW.x, pNE.x, pSE.x, pSW.x) < -64 ||
+          Math.min(pNW.x, pNE.x, pSE.x, pSW.x) > canvas.width + 64 ||
+          Math.max(pNW.y, pNE.y, pSE.y, pSW.y) < -64 ||
+          Math.min(pNW.y, pNE.y, pSE.y, pSW.y) > canvas.height + 96
+        ) {
+          return;
+        }
+
+        const rNW = toScreen(b.x, b.y, b.zHeight, camX, camY);
+        const rNE = toScreen(b.x + b.w, b.y, b.zHeight, camX, camY);
+        const rSE = toScreen(b.x + b.w, b.y + b.h, b.zHeight, camX, camY);
+        const rSW = toScreen(b.x, b.y + b.h, b.zHeight, camX, camY);
+
+        const sunCol = b.kind === 'storefront' ? C.terracottaSun : C.brickSun;
+        const shadeCol = b.kind === 'storefront' ? C.terracottaShade : C.brickShade;
+        const roofCol = b.kind === 'coop' ? C.roofCoop : C.roofTar;
+
+        drawQuad([rSW, rSE, pSE, pSW], sunCol, C.outline);
+        drawQuad([rSE, rNE, pNE, pSE], shadeCol, C.outline);
+        drawQuad([rNW, rNE, rSE, rSW], roofCol, '#b8b5c8');
+
+        const floors = Math.min(4, b.stories);
+        for (let f = 1; f <= floors; f++) {
+          const fz = (f / (floors + 1)) * b.zHeight;
+          for (let c = 1; c <= 2; c++) {
+            const u = c / 3;
+            const wx = Math.round(pSW.x + (pSE.x - pSW.x) * u);
+            const wy = Math.round(pSW.y + (pSE.y - pSW.y) * u - fz);
+            ctx.fillStyle = (b.variant + f + c) % 4 === 0 ? '#fde68a' : '#2b3a55';
+            ctx.fillRect(wx - 1, wy - 2, 2, 3);
+          }
+        }
+
+        const rcx = Math.round((rNW.x + rSE.x) * 0.5);
+        const rcy = Math.round((rNW.y + rSE.y) * 0.5);
+        ctx.fillStyle = C.steel;
+        ctx.fillRect(rcx - 3, rcy - 2, 6, 4);
+        if (b.hasWaterTower) {
+          ctx.fillStyle = C.outline;
+          ctx.fillRect(rcx + 3, rcy - 4, 4, 4);
+          ctx.fillStyle = '#9c6b43';
+          ctx.fillRect(rcx + 2, rcy - 9, 6, 5);
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(rcx + 1, rcy - 11, 8, 2);
+        }
+      }
+
+      function drawCharacterSprite(screenX, screenY, label, jacketColor, isRider, isPlayer, timeMs) {
+        const x = Math.round(screenX);
+        const y = Math.round(screenY);
+        const bob = isPlayer && (keysDown.size > 0 || Math.hypot(stickVector.x, stickVector.y) > 0.2)
+          ? Math.round(Math.sin(timeMs * 0.025))
+          : 0;
+
+        ctx.fillStyle = 'rgba(20, 16, 32, 0.55)';
+        ctx.fillRect(x - (isRider ? 7 : 5), y - 2, isRider ? 14 : 10, 3);
+
+        if (isRider) {
+          ctx.fillStyle = C.outline;
+          ctx.fillRect(x - 8, y - 5, 5, 4);
+          ctx.fillRect(x + 3, y - 5, 5, 4);
+          ctx.fillStyle = '#2563eb';
+          ctx.fillRect(x - 5, y - 7, 10, 3);
+        }
+
+        ctx.fillStyle = C.outline;
+        ctx.fillRect(x - 3, y - 7 + bob, 2, 6);
+        ctx.fillRect(x + 1, y - 7 - bob, 2, 6);
+
+        if (isPlayer) {
+          ctx.fillStyle = '#ffd46e';
+          ctx.fillRect(x - 5, y - 14 + bob, 3, 6);
+        }
+
+        ctx.fillStyle = C.outline;
+        ctx.fillRect(x - 4, y - 14 + bob, 8, 7);
+        ctx.fillStyle = jacketColor;
+        ctx.fillRect(x - 3, y - 13 + bob, 6, 5);
+
+        ctx.fillStyle = C.outline;
+        ctx.fillRect(x - 4, y - 21 + bob, 8, 7);
+        ctx.fillStyle = '#f0c39a';
+        ctx.fillRect(x - 3, y - 19 + bob, 6, 4);
+        ctx.fillStyle = isPlayer ? '#ff8f7a' : '#2f6b4f';
+        ctx.fillRect(x - 3, y - 20 + bob, 6, 2);
+
+        if (label) {
+          ctx.font = 'bold 8px sans-serif';
+          const tw = Math.ceil(ctx.measureText(label).width);
+          ctx.fillStyle = 'rgba(27, 21, 40, 0.9)';
+          ctx.fillRect(Math.round(x - tw * 0.5 - 2), y - 31, tw + 4, 10);
+          ctx.fillStyle = isPlayer ? '#ffd46e' : '#ffffff';
+          ctx.fillText(label, Math.round(x - tw * 0.5), y - 23);
+        }
+      }
+
+      function drawRadar() {
+        radarCtx.fillStyle = '#141020';
+        radarCtx.fillRect(0, 0, 68, 68);
+        const scale = 0.035;
+        const cx = 34, cy = 34;
+
+        for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i];
+          const x1 = cx + (seg.x1 - state.worldX) * scale;
+          const y1 = cy + (seg.y1 - state.worldY) * scale;
+          const x2 = cx + (seg.x2 - state.worldX) * scale;
+          const y2 = cy + (seg.y2 - state.worldY) * scale;
+          if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > 68 || Math.max(y1, y2) < 0 || Math.min(y1, y2) > 68) continue;
+          radarCtx.strokeStyle = seg.isPlaza ? '#f3dfb6' : seg.isPaseo ? '#2d9d6a' : seg.hasEl7 ? '#a855f7' : '#6f8aa0';
+          radarCtx.lineWidth = seg.isPlaza || seg.isPaseo ? 2 : 1;
+          radarCtx.beginPath();
+          radarCtx.moveTo(x1, y1);
+          radarCtx.lineTo(x2, y2);
+          radarCtx.stroke();
+        }
+
+        if (state.activeOrder) {
+          const target = state.activeOrder.status === 'assigned' ? state.activeOrder.pickup : state.activeOrder.dropoff;
+          const tx = Math.max(4, Math.min(64, cx + (target.worldX - state.worldX) * scale));
+          const ty = Math.max(4, Math.min(64, cy + (target.worldY - state.worldY) * scale));
+          radarCtx.fillStyle = state.activeOrder.status === 'assigned' ? '#fbbf24' : '#34d399';
+          radarCtx.beginPath();
+          radarCtx.arc(tx, ty, 3, 0, Math.PI * 2);
+          radarCtx.fill();
+        }
+
+        radarCtx.fillStyle = '#ffffff';
+        radarCtx.beginPath();
+        radarCtx.arc(cx, cy, 2.2, 0, Math.PI * 2);
+        radarCtx.fill();
+      }
+
+      let lastTime = performance.now();
+
+      function stepGame(now) {
+        const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+        lastTime = now;
+
+        let ix = stickVector.x;
+        let iy = stickVector.y;
+        if (keysDown.has('arrowleft') || keysDown.has('a')) ix -= 1;
+        if (keysDown.has('arrowright') || keysDown.has('d')) ix += 1;
+        if (keysDown.has('arrowup') || keysDown.has('w')) iy -= 1;
+        if (keysDown.has('arrowdown') || keysDown.has('s')) iy += 1;
+
+        if (!state.modalOpen && (ix !== 0 || iy !== 0)) {
+          const mag = Math.hypot(ix, iy) || 1;
+          ix /= mag;
+          iy /= mag;
+
+          let wxDelta = ix;
+          let wyDelta = iy;
+          if (state.viewMode === 'iso' && state.controlMode === 'screen') {
+            wxDelta = ix * 0.7071 + iy * 0.7071;
+            wyDelta = iy * 0.7071 - ix * 0.7071;
+          }
+
+          const baseSpeed = state.riding ? 225 : 135;
+          const mult = Math.pow(2, state.speedLevel);
+          const stepDist = baseSpeed * mult * dt;
+          const candX = state.worldX + wxDelta * stepDist;
+          const candY = state.worldY + wyDelta * stepDist;
+
+          const targetSurf = classifySurfaceAtWorld(candX, candY);
+          const canEnter = state.riding ? targetSurf.rideable : targetSurf.walkable;
+          if (canEnter) {
+            state.worldX = candX;
+            state.worldY = candY;
+          } else {
+            const surfX = classifySurfaceAtWorld(candX, state.worldY);
+            const surfY = classifySurfaceAtWorld(state.worldX, candY);
+            if (state.riding ? surfX.rideable : surfX.walkable) state.worldX = candX;
+            else if (state.riding ? surfY.rideable : surfY.walkable) state.worldY = candY;
+            else if (state.riding && now > state.surfaceToastUntil) {
+              state.surfaceToastText = 'Bikes must stay on roadways, crosswalks, plazas, or 34th Ave Paseo!';
+              state.surfaceToastUntil = now + 1800;
+              playSfx('blocked');
+            }
+          }
+        }
+
+        // Step Elevated 7 Train along Roosevelt Avenue
+        elTrain.worldX += elTrain.speed * elTrain.dir * dt;
+        if (elTrain.worldX > 525 * TILE_SIZE) {
+          elTrain.worldX = 525 * TILE_SIZE;
+          elTrain.dir = -1;
+        } else if (elTrain.worldX < 25 * TILE_SIZE) {
+          elTrain.worldX = 25 * TILE_SIZE;
+          elTrain.dir = 1;
+        }
+
+        for (let i = 0; i < trafficVehicles.length; i++) {
+          const v = trafficVehicles[i];
+          const len = Math.hypot(v.seg.x2 - v.seg.x1, v.seg.y2 - v.seg.y1) || 1;
+          v.t += ((v.speed * dt) / len) * v.dir;
+          if (v.t >= 1) { v.t = 1; v.dir = -1; }
+          else if (v.t <= 0) { v.t = 0; v.dir = 1; }
+          v.worldX = v.seg.x1 + (v.seg.x2 - v.seg.x1) * v.t;
+          v.worldY = v.seg.y1 + (v.seg.y2 - v.seg.y1) * v.t;
+        }
+
+        for (let i = 0; i < plazaPedestrians.length; i++) {
+          const p = plazaPedestrians[i];
+          const len = Math.hypot(p.seg.x2 - p.seg.x1, p.seg.y2 - p.seg.y1) || 1;
+          p.t += ((p.speed * dt) / len) * p.dir;
+          if (p.t >= 1) { p.t = 1; p.dir = -1; }
+          else if (p.t <= 0) { p.t = 0; p.dir = 1; }
+          p.worldX = p.seg.x1 + (p.seg.x2 - p.seg.x1) * p.t;
+          p.worldY = p.seg.y1 + (p.seg.y2 - p.seg.y1) * p.t;
+        }
+
+        const currentSurf = classifySurfaceAtWorld(state.worldX, state.worldY);
+        const wgs = worldToWgs84(state.worldX, state.worldY);
+        const locInfo = resolveCornerAndZone(state.worldX, state.worldY);
+        document.getElementById('hud-zone-name').textContent = locInfo.zone;
+        document.getElementById('hud-corner-name').textContent = locInfo.corner;
+        document.getElementById('hud-surface-badge').textContent = currentSurf.label;
+        document.getElementById('hud-wgs84').textContent = wgs.lat.toFixed(4) + '°N, ' + Math.abs(wgs.lon).toFixed(4) + '°W';
+
+        if (state.activeOrder) {
+          const target = state.activeOrder.status === 'assigned' ? state.activeOrder.pickup : state.activeOrder.dropoff;
+          const dx = target.worldX - state.worldX;
+          const dy = target.worldY - state.worldY;
+          const distM = Math.round(Math.hypot(dx, dy) * METERS_PER_PIXEL);
+          document.getElementById('order-distance-pill').textContent = distM + 'm ' + compassBearing(dx, dy);
+        }
+
+        let bestBiz = null, bestBizDist = 52;
+        for (let i = 0; i < businesses.length; i++) {
+          const b = businesses[i];
+          const d = Math.hypot(b.worldX - state.worldX, b.worldY - state.worldY);
+          if (d < bestBizDist) { bestBizDist = d; bestBiz = b; }
+        }
+        state.nearbyBusiness = bestBiz;
+
+        let bestDock = null, bestDockDist = 42;
+        for (let i = 0; i < bikeDocks.length; i++) {
+          const d = bikeDocks[i];
+          const dist = Math.hypot(d.worldX - state.worldX, d.worldY - state.worldY);
+          if (dist < bestDockDist) { bestDockDist = dist; bestDock = d; }
+        }
+        state.nearbyDock = bestDock;
+
+        const storeCard = document.getElementById('nearby-store-card');
+        if (bestBiz) {
+          storeCard.classList.remove('hidden');
+          document.getElementById('nearby-store-category').textContent = (bestBiz.category || 'SHOP').toUpperCase();
+          document.getElementById('nearby-store-title').textContent = bestBiz.name;
+          document.getElementById('nearby-store-addr').textContent = bestBiz.address || 'Jackson Heights, Queens';
+        } else {
+          storeCard.classList.add('hidden');
+        }
+
+        const dockCard = document.getElementById('nearby-dock-card');
+        if (bestDock) {
+          dockCard.classList.remove('hidden');
+          document.getElementById('nearby-dock-title').textContent = bestDock.label;
+          document.getElementById('nearby-dock-count').textContent = bestDock.bikes + '/' + bestDock.slots + ' Bikes';
+        } else {
+          dockCard.classList.add('hidden');
+        }
+
+        ctx.fillStyle = '#1b1528';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const camIso = worldToIso(state.worldX, state.worldY, 0);
+        const camX = state.viewMode === 'iso' ? camIso.screenX : state.worldX;
+        const camY = state.viewMode === 'iso' ? camIso.screenY : state.worldY;
+
+        drawVisibleGroundTiles(camX, camY);
+
+        const renderQueue = [];
+        const playerBinX = Math.floor(state.worldX / TILE_SIZE / BIN_TILES);
+        const playerBinY = Math.floor(state.worldY / TILE_SIZE / BIN_TILES);
+
+        for (let by = Math.max(0, playerBinY - 2); by <= Math.min(BIN_ROWS - 1, playerBinY + 2); by++) {
+          for (let bx = Math.max(0, playerBinX - 2); bx <= Math.min(BIN_COLS - 1, playerBinX + 2); bx++) {
+            const binIdx = by * BIN_COLS + bx;
+            const bList = buildingBins[binIdx];
+            for (let i = 0; i < bList.length; i++) {
+              const b = bList[i];
+              const foot = toScreen(b.x + b.w, b.y + b.h, 0, camX, camY);
+              renderQueue.push({ sortY: foot.y, draw: () => drawBuildingBlock(b, camX, camY) });
+            }
+            const tList = treeBins[binIdx];
+            for (let i = 0; i < tList.length; i++) {
+              const tr = tList[i];
+              const pt = toScreen(tr.worldX, tr.worldY, 0, camX, camY);
+              if (pt.x < -24 || pt.x > canvas.width + 24 || pt.y < -24 || pt.y > canvas.height + 24) continue;
+              const sway = Math.sin(now * tr.freq + tr.phase) * 1.5;
+              renderQueue.push({
+                sortY: pt.y,
+                draw: () => {
+                  ctx.fillStyle = C.outline;
+                  ctx.fillRect(pt.x - 2, pt.y - 7, 4, 7);
+                  ctx.fillStyle = '#b07c62';
+                  ctx.fillRect(pt.x - 1, pt.y - 6, 2, 6);
+                  ctx.fillStyle = C.outline;
+                  ctx.fillRect(Math.round(pt.x - 6 + sway), pt.y - 16, 12, 10);
+                  ctx.fillStyle = '#58b07f';
+                  ctx.fillRect(Math.round(pt.x - 5 + sway), pt.y - 15, 10, 8);
+                  ctx.fillStyle = '#7dd3a0';
+                  ctx.fillRect(Math.round(pt.x - 3 + sway), pt.y - 14, 6, 4);
+                },
+              });
+            }
+          }
+        }
+
+        // Elevated 7 Train steel support columns & overhead girder deck
+        for (let i = 0; i < elPillars.length; i++) {
+          const pil = elPillars[i];
+          const pN = toScreen(pil.worldX, pil.worldYNorth, 0, camX, camY);
+          if (pN.x < -80 || pN.x > canvas.width + 80 || pN.y < -80 || pN.y > canvas.height + 80) continue;
+          const pS = toScreen(pil.worldX, pil.worldYSouth, 0, camX, camY);
+          const topN = toScreen(pil.worldX, pil.worldYNorth, 34, camX, camY);
+          const topS = toScreen(pil.worldX, pil.worldYSouth, 34, camX, camY);
+
+          renderQueue.push({
+            sortY: pS.y + 4,
+            draw: () => {
+              ctx.fillStyle = '#334155';
+              ctx.fillRect(pN.x - 2, topN.y, 4, pN.y - topN.y);
+              ctx.fillRect(pS.x - 2, topS.y, 4, pS.y - topS.y);
+              ctx.strokeStyle = '#64748b';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.moveTo(topN.x, topN.y);
+              ctx.lineTo(topS.x, topS.y);
+              ctx.stroke();
+            },
+          });
+        }
+
+        // Animated 7 Express Subway Train cars elevated at z=36px
+        for (let c = 0; c < elTrain.cars; c++) {
+          const carWx = elTrain.worldX - c * 28 * elTrain.dir;
+          const ptDeck = toScreen(carWx, elTrain.worldY, 36, camX, camY);
+          const ptGround = toScreen(carWx, elTrain.worldY + 20, 0, camX, camY);
+          if (ptDeck.x < -60 || ptDeck.x > canvas.width + 60 || ptDeck.y < -60 || ptDeck.y > canvas.height + 60) continue;
+          renderQueue.push({
+            sortY: ptGround.y + 18,
+            draw: () => {
+              ctx.fillStyle = '#1e293b';
+              ctx.fillRect(ptDeck.x - 13, ptDeck.y - 11, 26, 11);
+              ctx.fillStyle = '#cbd5e1';
+              ctx.fillRect(ptDeck.x - 12, ptDeck.y - 10, 24, 9);
+              // Iconic MTA 7 Line purple stripe & lit windows
+              ctx.fillStyle = '#9333ea';
+              ctx.fillRect(ptDeck.x - 12, ptDeck.y - 5, 24, 2);
+              ctx.fillStyle = '#fde68a';
+              ctx.fillRect(ptDeck.x - 9, ptDeck.y - 9, 4, 3);
+              ctx.fillRect(ptDeck.x - 2, ptDeck.y - 9, 4, 3);
+              ctx.fillRect(ptDeck.x + 5, ptDeck.y - 9, 4, 3);
+            },
+          });
+        }
+
+        for (let i = 0; i < businesses.length; i++) {
+          const biz = businesses[i];
+          const pt = toScreen(biz.worldX, biz.worldY, 0, camX, camY);
+          if (pt.x < -50 || pt.x > canvas.width + 50 || pt.y < -50 || pt.y > canvas.height + 50) continue;
+          const isNear = state.nearbyBusiness && state.nearbyBusiness.id === biz.id;
+          const isOrderStop =
+            state.activeOrder &&
+            (state.activeOrder.pickup.id === biz.id || state.activeOrder.dropoff.id === biz.id);
+          renderQueue.push({
+            sortY: pt.y + 2,
+            draw: () => {
+              ctx.fillStyle = C.outline;
+              ctx.fillRect(pt.x - 9, pt.y - 13, 18, 6);
+              ctx.fillStyle = biz.awningColor;
+              ctx.fillRect(pt.x - 8, pt.y - 12, 16, 4);
+              if (isNear || isOrderStop || ICONIC_DISHES[biz.name]) {
+                ctx.font = 'bold 8px sans-serif';
+                const tw = Math.ceil(ctx.measureText(biz.name).width);
+                ctx.fillStyle = isOrderStop ? '#d97706' : 'rgba(42, 31, 61, 0.92)';
+                ctx.fillRect(Math.round(pt.x - tw * 0.5 - 3), pt.y - 24, tw + 6, 10);
+                ctx.fillStyle = '#fffaf0';
+                ctx.fillText(biz.name, Math.round(pt.x - tw * 0.5), pt.y - 16);
+              }
+            },
+          });
+        }
+
+        for (let i = 0; i < bikeDocks.length; i++) {
+          const dock = bikeDocks[i];
+          const pt = toScreen(dock.worldX, dock.worldY, 0, camX, camY);
+          if (pt.x < -40 || pt.x > canvas.width + 40 || pt.y < -40 || pt.y > canvas.height + 40) continue;
+          renderQueue.push({
+            sortY: pt.y + 1,
+            draw: () => {
+              ctx.fillStyle = C.outline;
+              ctx.fillRect(pt.x - 8, pt.y - 7, 16, 7);
+              ctx.fillStyle = '#2563eb';
+              ctx.fillRect(pt.x - 7, pt.y - 6, 14, 5);
+            },
+          });
+        }
+
+        for (let i = 0; i < trafficVehicles.length; i++) {
+          const v = trafficVehicles[i];
+          const pt = toScreen(v.worldX, v.worldY, 0, camX, camY);
+          if (pt.x < -30 || pt.x > canvas.width + 30 || pt.y < -30 || pt.y > canvas.height + 30) continue;
+          renderQueue.push({
+            sortY: pt.y,
+            draw: () => {
+              ctx.fillStyle = C.outline;
+              ctx.fillRect(pt.x - 7, pt.y - 8, 14, 7);
+              ctx.fillStyle = v.color;
+              ctx.fillRect(pt.x - 6, pt.y - 7, 12, 5);
+            },
+          });
+        }
+
+        for (let i = 0; i < plazaPedestrians.length; i++) {
+          const ped = plazaPedestrians[i];
+          const pt = toScreen(ped.worldX, ped.worldY, 0, camX, camY);
+          if (pt.x < -30 || pt.x > canvas.width + 30 || pt.y < -30 || pt.y > canvas.height + 30) continue;
+          renderQueue.push({
+            sortY: pt.y,
+            draw: () => drawCharacterSprite(pt.x, pt.y, null, ped.color, false, false, now),
+          });
+        }
+
+        const dispPt = toScreen(dispatcherNpc.worldX, dispatcherNpc.worldY, 0, camX, camY);
+        renderQueue.push({
+          sortY: dispPt.y,
+          draw: () => drawCharacterSprite(dispPt.x, dispPt.y, 'Dispatcher', '#c7a6e6', false, false, now),
+        });
+
+        const playerPt = toScreen(state.worldX, state.worldY, 0, camX, camY);
+        renderQueue.push({
+          sortY: playerPt.y,
+          draw: () => drawCharacterSprite(playerPt.x, playerPt.y, 'YOU', '#6fcfc4', state.riding, true, now),
+        });
+
+        renderQueue.sort((a, b) => a.sortY - b.sortY);
+        for (let i = 0; i < renderQueue.length; i++) renderQueue[i].draw();
+
+        if (state.activeOrder) {
+          const target = state.activeOrder.status === 'assigned' ? state.activeOrder.pickup : state.activeOrder.dropoff;
+          const tPt = toScreen(target.worldX, target.worldY, 0, camX, camY);
+          const bob = Math.round(Math.sin(now * 0.008) * 2);
+
+          ctx.fillStyle = state.activeOrder.status === 'assigned' ? '#fbbf24' : '#34d399';
+          ctx.beginPath();
+          ctx.moveTo(tPt.x, tPt.y - 26 + bob);
+          ctx.lineTo(tPt.x - 5, tPt.y - 34 + bob);
+          ctx.lineTo(tPt.x + 5, tPt.y - 34 + bob);
+          ctx.closePath();
+          ctx.fill();
+
+          if (tPt.x < 20 || tPt.x > canvas.width - 20 || tPt.y < 20 || tPt.y > canvas.height - 20) {
+            const angle = Math.atan2(tPt.y - canvas.height * 0.5, tPt.x - canvas.width * 0.5);
+            const edgeR = Math.min(canvas.width, canvas.height) * 0.35;
+            const ax = canvas.width * 0.5 + Math.cos(angle) * edgeR;
+            const ay = canvas.height * 0.5 + Math.sin(angle) * edgeR;
+            ctx.save();
+            ctx.translate(ax, ay);
+            ctx.rotate(angle);
+            ctx.fillStyle = state.activeOrder.status === 'assigned' ? '#fbbf24' : '#34d399';
+            ctx.beginPath();
+            ctx.moveTo(8, 0);
+            ctx.lineTo(-6, -5);
+            ctx.lineTo(-6, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+
+        if (now < state.surfaceToastUntil && state.surfaceToastText) {
+          ctx.font = 'bold 8px sans-serif';
+          const tw = Math.ceil(ctx.measureText(state.surfaceToastText).width);
+          const bx = Math.round(canvas.width * 0.5 - tw * 0.5 - 6);
+          const by = 42;
+          ctx.fillStyle = 'rgba(153, 27, 27, 0.94)';
+          ctx.fillRect(bx, by, tw + 12, 16);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(state.surfaceToastText, bx + 6, by + 11);
+        }
+
+        drawRadar();
+        requestAnimationFrame(stepGame);
+      }
+
+      window.onload = function () {
+        resizeCanvas();
+        const startPt = snapToNearestRideableOrWalkable(dispatcherNpc.worldX, dispatcherNpc.worldY);
+        state.worldX = startPt.x;
+        state.worldY = startPt.y;
+        pickDynamicOrder(businesses.find((b) => b.name === 'Phayul'));
+        requestAnimationFrame(stepGame);
+      };
+    })();
+  </script>
+</body>
+</html>
